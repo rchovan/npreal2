@@ -1,0 +1,170 @@
+
+Product:	NPort Linux Real TTY Driver (V2)
+Version:	1.18.33 Build 14060316
+Date:		06/03/2014
+Company:	Moxa Inc.
+            
+Release Note:
+=============
+ver1.18.33 Build 14060316
+1. Bugifx: Every 20 seconds there is a loss of communication on the 
+	   Ethernet side to/from the NPort when user is used in IPv6.
+
+ver1.18.31 Build 14052916
+1. Bugfix: Textual modification.
+
+ver1.18.29 Build 14052013
+1. Improve: Support Linux kernel up to 3.13
+2. Bugfix: The port might cease to read data due to a flow control issue after
+           Linux kernel 3.8
+
+ver1.18.27 Build 14050810
+1. Bugfix: Driver will crash when connecting to a offline NPort if 
+           security mode is enabled.
+
+ver1.18.25 Build 14032010
+1. Bugfix: The port mapping be incorrect after reboot.
+
+ver1.18.23 Build 14031317
+1. Bugfix: If nport power off, the mechanism of reconnection will be triggered,
+	   but the current serial parameters was not set by the mechanism of 
+	   reconnection.
+
+ver1.18.21 Build 14030611
+1. Bugfix: when executing mxsetsec, the configuration of nport will be cleared.
+
+ver1.18.19 Build 14022618
+1. Bugfix: When opening node /dev/ttyr10, the port 16 should be opened, but
+	   the error port 10 is opened.
+
+ver1.18.17 Build 14010210
+1. Improve: Support Linux kernel up to 3.11.3
+
+ver1.18.15 Build 13092615
+1. Bugfix: The driver reference count becomes minus after port open fail.
+
+ver1.18.13 Build 13091016
+1. Improve: Update README.TXT for Debian 
+
+ver1.18.11 Build 13073017
+1. Bugfix: The RealTTY not compile correctly if kernel version contains
+           keywords "2.4" and it is not kernel 2.4.
+
+ver1.18.9 Build 13050816
+1. Bugfix: Fix driver compile error for kernel 3.8
+
+ver1.18.7 Build 13050317
+1. New: Remove call out ports, now add server no longer create call out ports.
+2. Improve: Support Linux kernel up tp 3.8.4.
+3. Bugfix: In background polling mode, the port other than port 1 works 
+           malfunctioned.
+
+ver1.18.5 Build 13042515
+1. New: Add NPort background polling feature.
+
+ver1.18.3 Build 13031515
+1. Improve: Modify permission of the /tmp folder that contain Real TTY driver. 
+
+ver1.18.1 Build 12051018
+1. Improve: Support Linux kernel up to 3.3.2.
+
+ver1.18 Build 12020919
+1. Improve: Support Linux Kernel up to 3.1.0-7
+2. improve: Modify Makefile for compatibility under Ubuntu 11.10  
+3. Bugfix: Driver can't support maximum connection in Redundant COM Mode.
+4. Bugfix: Compiler error when security option is enabled.
+
+ver1.17 Build 10122918
+1. New: Support Redundant COM Mode for CN2600 series 
+        (Firmware version cn2600-2ac_Ver4.2_Build_10081915.rom).
+2. New: Support add port dynamically for Real COM Mode.
+3. Improve: Support Linux kernel up to 2.6.36.
+4. Bugfix: The Cu command does not work properly when the security option 
+           is enabled. 
+5. Bugfix: The driver will still connect to NPort when user closed port.
+6. Bugfix: The driver will still connect to NPort when user type ctrl + c.
+7. Bugfix: If remote device is not alive, getty can't login.
+8. Bugfix: Receiver break signal before open port completed. 
+           it'll break on close port.
+9. Bugfix: Driver Can't check CN26x0 is alive or not.
+
+ver1.16 (03/05/2009)
+1. VR
+3. New: Add mxsetsec select all port to secure or either.
+4. Bugfix: If SELinux does not support MLS, it fail to create /dev/ttyr* node.
+5. Bugfix: When open port fail, will let module can't remove.
+6. Support domain name.
+7. Bugfix: In kernel 2.6.28, it will let system collapse.
+8. Support Linux kernel up to 2.6.27(Ubuntu 8.10).
+9. New: Support linear baudrate.
+   Run 3 steps to set customed baudrate: (E.g., /dev/ttyr00, baudrate 500K)
+     (1) /bin/setserial /dev/ttyr00 spd_cust
+     (2) /bin/setserial /dev/ttyr00 divisor 1
+     (3) /bin/setserial /dev/ttyr00 baud_base 500000
+   Run 1 step to recover to normal mode:
+     (1) /bin/setserial /dev/ttyr00 divisor 0
+10. Bugfix: Compile failed for kernel v2.6.21 platform.
+
+Ver1.15 (4/22/2008)
+1. New: Support IPv6 (kernel 2.6.x).
+
+Ver 1.14 (6/26/2007)
+1. Official release.
+2. New: support 32 port model.
+3. Bugfix: local buffer isn't cleared when port is closed.
+
+Ver 1.13 (11/17/2006)
+1. Official release.
+2. Support Secure RealCOM operating mode at NPort 6000 series.  
+
+Ver 1.12 (2/23/2006)
+1. Offical release.
+2. new: Add termio CMSPAR option. Now the driver supports MARK and SPACE parity checks.
+3. bugfix: Use access_ok() instead of verify_ok(), since it is obsolete in 2.6.x kernel.
+
+Ver 1.11 (7/25/2005)
+1. Offical release.
+2. new: Support NPort IA model.
+
+Ver 1.10 (4/22/2005)
+1. Further verified the supported Moxa products.
+2. Support Linux kernel version 2.4.x to 2.6.9.
+3. Bug fixed: Warning message occurs with ppp dialout case.
+4. Bug fixed: With kernel 2.4, try to ping a packet larger than 4KB via
+              ppp dialout caused Linux to hang.
+
+Ver 1.9 (3/2/2005)
+1. Bug fixed: server index of ttyinfo table is not correct. Connection might
+     be down incorrectly.
+
+Ver 1.8 (2/22/2005)
+1. Bug fixed: Open might be slow or failed.
+2. Bug fixed: Warning message occurs when adding/removing nodes in Fedora Core3.
+3. Add Slackware support (Kernel version 2.4.x).
+4. Bug fixed: /dev/ttyr?? nodes might be deleted after system reboot in some Linux kernel 2.6.x.
+
+Ver 1.7 (12/31/2004)
+1. Support ASPP baud rate error detection.
+2. Modified DSCI netstat command: using little endian for max_socket field.
+3. Add new product NPort 5110 into README.TXT and VERSION.TXT.
+4. Fix bug: ap_id field is 4 byte long. Use ntohl() and htonl() to convert between host and network format.
+5. Add alive check mechanism for MOXA products which support DSCI commands (get net state).
+6. Modified alive check to support multiple connections.
+
+Ver1.6
+1. Support Linux kernel 2.6.
+2. Callout device (cur*) is obsolete under Linux 2.6.
+
+Ver1.5
+1. Support NE-4100T, NE-4110S, NE-4120S, NE-4110A, NE-4120A.
+
+Ver1.4
+1. Support CN2510-8, CN2510-16, CN2610-8, CN2610-16.
+2. Fix compiling error: request for member `counter' in 
+   something not a structure or union. Except Fedora, this is 
+   encounterd on any distribution with kernel version
+   >= 2.4.22. (Bug#33)
+3. Fix compiling error on Red Hat 7.2: The MODULE_LICENSE is 
+   not defined. (Bug#5)
+
+-End-
