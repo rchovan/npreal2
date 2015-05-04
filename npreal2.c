@@ -5203,7 +5203,7 @@ npreal_wait_oqueue(
         {
 #if (LINUX_VERSION_CODE >= VERSION_CODE(3,15,0))
             prepare_to_wait(&nd->cmd_rsp_wait, &wait, TASK_INTERRUPTIBLE);
-            timeout = schedule_timeout(1);
+            timeout = schedule_timeout(timeout);
             finish_wait(&nd->cmd_rsp_wait, &wait);
 #elif (LINUX_VERSION_CODE >= VERSION_CODE(2,1,0))
             timeout =
