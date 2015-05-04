@@ -66,6 +66,9 @@
 #if (LINUX_VERSION_CODE < VERSION_CODE(2,6,39))
 #include <linux/smp_lock.h>
 #endif
+#if (LINUX_VERSION_CODE >= VERSION_CODE(3,15,0))
+#include <linux/wait.h>
+#endif
 #include <linux/proc_fs.h>
 #else
 #ifdef MODULE
@@ -4708,6 +4711,9 @@ npreal_wait_command_completed(
     char *rsp_buf,
     int  *rsp_len)
 {
+#if (LINUX_VERSION_CODE >= VERSION_CODE(3,15,0))
+    DEFINE_WAIT(wait);
+#endif
     long	et = 0;
 
     if ((command_set != NPREAL_LOCAL_COMMAND_SET)&&((nd->flag & NPREAL_NET_DO_SESSION_RECOVERY)||(nd->flag&NPREAL_NET_NODE_DISCONNECTED)))
@@ -4740,7 +4746,11 @@ npreal_wait_command_completed(
             }
             if (timeout != MAX_SCHEDULE_TIMEOUT)
                 et = jiffies + timeout;
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,1,0))
+#if (LINUX_VERSION_CODE >= VERSION_CODE(3,15,0))
+            prepare_to_wait(&nd->cmd_rsp_wait, &wait, TASK_INTERRUPTIBLE);
+            schedule_timeout(timeout);
+            finish_wait(&nd->cmd_rsp_wait, &wait);
+#elif (LINUX_VERSION_CODE >= VERSION_CODE(2,1,0))
             interruptible_sleep_on_timeout(&nd->cmd_rsp_wait,timeout);
 #else
             current->timeout = timeout;
@@ -5137,6 +5147,9 @@ npreal_wait_oqueue(
 #if (LINUX_VERSION_CODE < VERSION_CODE(2,1,0))
     long	st;
 #endif
+#if (LINUX_VERSION_CODE >= VERSION_CODE(3,15,0))
+    DEFINE_WAIT(wait);
+#endif
     uint32_t    tout;
 
     if (!(nd = info->net_node))
@@ -5163,7 +5176,11 @@ npreal_wait_oqueue(
         wake_up_interruptible( &nd->select_ex_wait );
     while (nd->cmd_ready == 1)
     {
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,1,0))
+#if (LINUX_VERSION_CODE >= VERSION_CODE(3,15,0))
+        prepare_to_wait(&nd->cmd_rsp_wait, &wait, TASK_INTERRUPTIBLE);
+        schedule_timeout(1);
+        finish_wait(&nd->cmd_rsp_wait, &wait);
+#elif (LINUX_VERSION_CODE >= VERSION_CODE(2,1,0))
         interruptible_sleep_on_timeout(&nd->cmd_rsp_wait,1);
 #else
         current->timeout = 1;
@@ -5184,7 +5201,11 @@ npreal_wait_oqueue(
     {
         if (nd->wait_oqueue_responsed == 0)
         {
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,1,0))
+#if (LINUX_VERSION_CODE >= VERSION_CODE(3,15,0))
+            prepare_to_wait(&nd->cmd_rsp_wait, &wait, TASK_INTERRUPTIBLE);
+            timeout = schedule_timeout(1);
+            finish_wait(&nd->cmd_rsp_wait, &wait);
+#elif (LINUX_VERSION_CODE >= VERSION_CODE(2,1,0))
             timeout =
                 interruptible_sleep_on_timeout(&nd->cmd_rsp_wait,timeout);
 #else
