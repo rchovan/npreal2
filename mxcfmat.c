@@ -3,11 +3,11 @@
 #include <stdlib.h>
 
 #define     ER_ARG  -10
-#define     ARGUMENT_NUM 11 
+#define     ARGUMENT_NUM 11
 
 int main(int arg, char *argv[])
 {
-    int i, j, len, flag;
+    size_t i, j, len, flag;
     char *tmpstr, *token, *minor_token, *chk;
     char delim[] = " \t";
     char major[20];

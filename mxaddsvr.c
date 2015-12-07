@@ -16,7 +16,7 @@
 int minor[256];
 char *tmptty, *tmpcout;
 int idx;
-int dataport, cmdport;
+size_t dataport, cmdport;
 char scope_id_s[20] = "0";
 char Gredundant_ip[40];
 
@@ -24,7 +24,7 @@ int getch()
 {
 	int ch;
 	struct termios oldt, newt;
-	
+
 	tcgetattr(STDIN_FILENO, &oldt);
 	memcpy(&newt, &oldt, sizeof(newt));
 	newt.c_lflag &= ~(ECHO | ICANON | ECHOE | ECHOK | ECHONL | ECHOPRT
@@ -34,7 +34,7 @@ int getch()
 	ch = getchar();
 	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
 
-	return ch;	
+	return ch;
 }
 
 char* concate(char *str, char *c, char *ret)
@@ -183,44 +183,44 @@ int check_usage(int arg, char *argv[], int mode)
     int ret;
 
 	ret = 0;
-	
+
 	switch (mode) {
 #if 0
 	case REDUNDANT_MODE:
 		printf("-----------------------Redundant Mode------------------------------\n");
     	if(arg > 2) {
-        	if((strncmp(argv[1], "fe80", 4) == 0) || (strncmp(argv[1], "FE80", 4) == 0) || 
+        	if((strncmp(argv[1], "fe80", 4) == 0) || (strncmp(argv[1], "FE80", 4) == 0) ||
 		   	(strncmp(argv[1], "Fe80", 4) == 0) || (strncmp(argv[1], "fE80", 4) == 0))
             	scope_id = 1;
         	else
             	scope_id = 0;
     	}
- 
+
     	if (arg == 5 + scope_id) {
         	dataport = 950;
         	cmdport = 966;
 			if(scope_id)
 				strcpy(scope_id_s, argv[3]);
 	#if REDUNDANT
-	#if 1 
+	#if 1
 		} else if (arg = 4 + scope_id) {
 			dataport = 950;
 			cmdport = 966;
 		    memset(Gredundant_ip, '\0', 40);
-    	
+
 			if (strlen(argv[3]) > 39) {
     			printf("The server name length over 39!\n\n");
-   
+
 				return ER_ARG;
     		}
-			
+
 	    	sprintf(Gredundant_ip, "%s", argv[3]);
 			printf("IP2 = %s\n", Gredundant_ip);
     		if (strcmp(Gredundant_ip, "255.255.255.255") == 0) {
         		printf("Invalid IP Address!\n\n");
-            
+
 				return ER_ARG;
-    		}		
+    		}
 
 			if(scope_id)
 				strcpy(scope_id_s, argv[3]);
@@ -281,13 +281,13 @@ int check_usage(int arg, char *argv[], int mode)
 #endif
 	case REALCOM_MODE:
     	if(arg > 2) {
-        	if((strncmp(argv[1], "fe80", 4) == 0) || (strncmp(argv[1], "FE80", 4) == 0) || 
+        	if((strncmp(argv[1], "fe80", 4) == 0) || (strncmp(argv[1], "FE80", 4) == 0) ||
 		   	(strncmp(argv[1], "Fe80", 4) == 0) || (strncmp(argv[1], "fE80", 4) == 0))
             	scope_id = 1;
         	else
             	scope_id = 0;
     	}
- 
+
     	if (arg == 3 + scope_id) {
         	dataport = 950;
         	cmdport = 966;
@@ -299,10 +299,10 @@ int check_usage(int arg, char *argv[], int mode)
 			dataport = 950;
 			cmdport = 966;
 		    memset(Gredundant_ip, '\0', 40);
-    	
+
 			if (strlen(argv[3]) > 39) {
     			printf("The server name length over 39!\n\n");
-   
+
 				return ER_ARG;
     		}
 
@@ -310,9 +310,9 @@ int check_usage(int arg, char *argv[], int mode)
 
     		if (strcmp(Gredundant_ip, "255.255.255.255") == 0) {
         		printf("Invalid IP Address!\n\n");
-            
+
 				return ER_ARG;
-    		}		
+    		}
 
 			if(scope_id)
 				strcpy(scope_id_s, argv[3]);
@@ -367,7 +367,7 @@ int check_usage(int arg, char *argv[], int mode)
     	    	printf("\t#./mxaddsvr fe80::290:e8ff:fe50:1601 32 eth0\n");
         	printf("\t#./mxaddsvr 2001:b021:12:0:290:e8ff:fe50:1601 32\n");
 		printf("\nType ANY key to continue...");
-		getch();	
+		getch();
     		system("clear");
 	        printf("Redundant COM Mode\n");
 	        printf("usage: ./mxaddsvr -r [ip1] [ip2] [totalport] ([data port] [cmd port])\n");
@@ -395,7 +395,7 @@ int check_usage(int arg, char *argv[], int mode)
 int main(int arg, char *argv[])
 {
     int i, j;
-    int total, len, overwrite, fifo, mn, ssl;
+    size_t total, len, overwrite, fifo, mn, ssl;
     int ttymajor, calloutmajor;
     char c;
     char *tmpstr, *tmp1, *tmp2;
@@ -415,8 +415,8 @@ int main(int arg, char *argv[])
 
     if (arg > 1) {
         if (strcmp(argv[1], "-r") == 0) {
-	    mode = REDUNDANT_MODE;	
-        } 
+	    mode = REDUNDANT_MODE;
+        }
 
         if (mode == REDUNDANT_MODE && arg < 5) {
 	    printf("Redundant COM Mode\n");
@@ -457,7 +457,7 @@ int main(int arg, char *argv[])
         	printf("Invalid IP Address!\n\n");
 	        return -1;
     	}
-		/*	
+		/*
 	    strcpy(ip_buf, ip);
     	if(!inet_pton(AF_INET, ip_buf, &addr))
 	    {
@@ -468,7 +468,7 @@ int main(int arg, char *argv[])
         	    return -1;
         	}
     	}
-	*/	
+	*/
 		break;
 	case REDUNDANT_MODE:
 	    sprintf(ip, "%s", argv[2]);
@@ -733,12 +733,12 @@ int main(int arg, char *argv[])
         }
 #if REDUNDANT
 		if (mode == REALCOM_MODE)
-        	sprintf (tmpstr, "%d\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%d\t\n", mn, ip, dataport+i, cmdport+i, fifo, ssl, tmpt, tmpc, scope_id_s, mode);
+        	sprintf (tmpstr, "%zu\t%s\t%zu\t%zu\t%zu\t%zu\t%s\t%s\t%s\t%d\t\n", mn, ip, dataport+i, cmdport+i, fifo, ssl, tmpt, tmpc, scope_id_s, mode);
 		else if (mode == REDUNDANT_MODE)
-        	sprintf (tmpstr, "%d\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%d\t%s\n", mn, ip, dataport+i, cmdport+i, fifo, ssl, tmpt, tmpc, scope_id_s, mode, 
+        	sprintf (tmpstr, "%zu\t%s\t%zu\t%zu\t%zu\t%zu\t%s\t%s\t%s\t%d\t%s\n", mn, ip, dataport+i, cmdport+i, fifo, ssl, tmpt, tmpc, scope_id_s, mode,
 																			 Gredundant_ip);
 #else
-        	sprintf (tmpstr, "%d\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n", mn, ip, dataport+i, cmdport+i, fifo, ssl, tmpt, tmpc, scope_id_s);
+        	sprintf (tmpstr, "%zu\t%s\t%zu\t%zu\t%zu\t%zu\t%s\t%s\t%s\n", mn, ip, dataport+i, cmdport+i, fifo, ssl, tmpt, tmpc, scope_id_s);
 #endif
         fputs (tmpstr, f);
         sprintf(tmpstr, "%s/mxrmnod /dev/%s", DRIVERPATH, tmpt);

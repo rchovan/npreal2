@@ -34,7 +34,7 @@ char* GetIP(unsigned long ip, char *ret)
 int main(int arg, char *argv[])
 {
     int i, j;
-    int len, daemon;
+    size_t len, daemon;
     struct in_addr ad;
     char *tmpstr, *tmp, *os, c[5];
     char token[50], tty[20], cout[20], major[20], del[50];
