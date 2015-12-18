@@ -214,10 +214,8 @@ if [ "$OS" = "debian" ]
 then
     touch /etc/init.d/npreals
 fi
-
 trap interrupt_quit2 1 3 9 15       # trap signal
 trap interrupt_nothing2 2           # trap signal SIGINT
-
 
 ########################################################
 # check configuration file. (npreal2d.cf)
@@ -431,10 +429,8 @@ echo "OK!"
 #cp -f $driverPath/npreal2.o /lib/modules/`uname -r`/misc
 
 
-ps -ef | grep npreal2 |
-awk '$0 !~ /grep/ {system("kill -15 "$2)}'
-ps -ef | grep npreal2 |
-awk '$0 !~ /grep/ {system("kill -9 "$2)}'
+ps -ef | grep npreal2 | awk '$0 !~ /grep|mxinst/ {system("kill -15 "$2)}'
+ps -ef | grep npreal2 | awk '$0 !~ /grep|mxinst/ {system("kill -9 "$2)}'
 
 
 
