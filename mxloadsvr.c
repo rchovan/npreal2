@@ -21,7 +21,7 @@ int version_upgrade_check()
     char tmpstr[1024], tmpstr2[1024], token[256], *chk;
     char delim[] = " \t";
     FILE *f, *ft;
-    int i, len;
+    size_t i, len;
 
     /* check if npreal2d.cf is empty or not */
     memset(tmpstr, '\0', 1024);
@@ -92,7 +92,7 @@ int version_upgrade_check()
                     }
                     else
                     {
-                        DBG_PRINT("i=%d\n", i);
+                        DBG_PRINT("i=%zu\n", i);
                         chk = strtok(NULL, delim);
                         if (i == 2 && chk != NULL)
                         {
@@ -125,7 +125,7 @@ int modify_script(char *tmpfile, char *modfile, char *addstr)
 {
     char *filestr;
     FILE *f, *fos, *tf;
-    int len=1024;
+    size_t len=1024;
 
     filestr = (char *)malloc(1024);
 
@@ -176,7 +176,7 @@ int modify_script(char *tmpfile, char *modfile, char *addstr)
 
 int main(int arg, char *argv[])
 {
-    int i, chk, len, makenode;
+    size_t i, chk, len, makenode;
     int ttymajor, calloutmajor;
     int daemon_flag, cf_flag;
     char *tmpstr, *os;

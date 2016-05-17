@@ -30,3 +30,19 @@
 
 # Debug files
 *.dSYM/
+
+# Build files
+.npreal2.ko.cmd
+.npreal2.mod.o.cmd
+.npreal2.o.cmd
+.tmp_versions/
+Module.symvers
+modules.order
+mxaddsvr
+mxcfmat
+mxdelsvr
+mxloadsvr
+mxsetsec
+npreal2.mod.c
+npreal2d
+npreal2d_redund
