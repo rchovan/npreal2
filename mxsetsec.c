@@ -103,12 +103,12 @@ int SetSecure(int index)
         if ((c[0] == 'n') || (c[0] == 'N'))
         {
             if (page == 0 && tot>16)
-                page++; 
+                page++;
         }
         if ((c[0] == 'p') || (c[0] == 'P'))
         {
             if (page == 1 && tot>16)
-                page--; 
+                page--;
         }
         else if ((c[0] == 'a') || (c[0] == 'A'))
         {
@@ -169,7 +169,7 @@ int SelectNPort()
 int main(int arg, char *argv[])
 {
     int i, j;
-    int len, daemon, num, ret;
+    size_t len, daemon, num, ret;
     char *tmpstr, *tmp, *os;
     char token[40], tty[10], cout[10], major[20], del[16], sec[10], index[10];
     char data[10], cmd[10], fifo[10], scope[10];
