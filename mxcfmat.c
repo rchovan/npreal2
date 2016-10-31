@@ -1,6 +1,7 @@
 #include "nport.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define     ER_ARG  -10
 #define     ARGUMENT_NUM 11 
@@ -41,7 +42,7 @@ int main(int arg, char *argv[])
     {
         flag = 0;
         memset(token, '\0', 256);
-        if (getline (&tmpstr, &len, f) < 0)
+        if (getline (&tmpstr, (size_t*)&len, f) < 0)
         {
             break;
         }

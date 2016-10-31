@@ -65,7 +65,7 @@ struct redund_struct
 	int connect[2]; /* redund_connect */
 	int close[2]; /* redund_connect */
 
-	int	disdata[2];
+	//int	disdata[2];
 	int reconnect[2]; /* redund_reconnect */
 
     uint16_t debug_seq;

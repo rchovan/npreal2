@@ -1,0 +1,12 @@
+
+
+The NPort Linux driver supports Linux Kernel 3.x 
+===============================================================
+
+1. The first NPort Linux driver which supports Kernel 3.x is derived from
+   ver1.18.43
+
+2. The driver is tested to support Kernel 3.x. If any compatible issue, please
+   contact support@moxa.com
+
+-End-

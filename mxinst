@@ -1,5 +1,5 @@
 ##########################################################################
-#   Copyright (C) 2003-2014  Moxa Inc.
+#   Copyright (C) 2003-2015  Moxa Inc.
 #   All Rights Reserved.
 #
 #
@@ -17,7 +17,8 @@ DirTmp=${DirTmp%/mxinst}
 TempDir=$DirTmp
 
 NPPATH="/usr/lib/npreal2"
-ProductName="MOXA NPort Server Real TTY Driver V1.18.33"
+ProductName="MOXA NPort Server Real TTY Driver"
+ProductVer=""
 OS="linux"
 Device=""
 check=""
@@ -170,12 +171,18 @@ then
     exit 1
 fi
 
-echo "
+ProductVer=`awk '{if($2=="NPREAL_VERSION"){print $3}}' np_ver.h`
+
+echo -n "
 ===============================================================================
-Copyright (C) 2002-2014  Moxa Inc.
+Copyright (C) 2002-2015  Moxa Inc.
 All Rights Reserved.
 
-$ProductName Installation.
+$ProductName "
+
+echo -n $ProductVer | sed s/\"//g
+
+echo " Installation.
 System Information: Kernel `uname -r`; Machine `uname -m`.
 ===============================================================================
 "
@@ -392,9 +399,9 @@ cp -f $NowPath/mxmknod     $driverPath
 cp -f $NowPath/mxrmnod     $driverPath
 cp -f $NowPath/mxuninst    $driverPath
 cp -f $NowPath/mxsetsec    $driverPath
-cp -f $NowPath/README.TXT  $NPPATH
-cp -f $NowPath/VERSION.TXT $NPPATH
-cp -f $NowPath/kernel2.6.txt $NPPATH
+cp -f $NowPath/../README.TXT  $NPPATH
+cp -f $NowPath/../VERSION.TXT $NPPATH
+cp -f $NowPath/kernel3.txt $NPPATH
 echo "OK!"
 
 

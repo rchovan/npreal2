@@ -47,8 +47,10 @@ int Gkeep_alive = 1;  			/* open keepalive */
 int Gkeep_idle = 1;   			/* idle time (sec)*/
 int Gkeep_interval = 3;			/* interval time (sec) */
 int Gkeep_count = 2;			/* try how many time */
-int Gport_cnt = 0;
+//int Gport_cnt = 0;
 int Gport_num = 0;
+int Glost_cnt = 0;			
+int Grecovery = 0;
 pthread_mutex_t Gmutex = PTHREAD_MUTEX_INITIALIZER;
 
 int connect_nonb(int fd, struct sockaddr_in *sockaddr, socklen_t socklen, int usec);
@@ -121,7 +123,6 @@ extern int		ttys, servers;
 extern TTYINFO 	ttys_info[MAX_TTYS];
 extern SERVINFO	serv_info[MAX_TTYS];
 extern char		EventLog[160];		/* Event log file name */
-extern int		pipefd[2];
 extern int		maxfd;
 extern int      timeout_time;
 extern int		polling_time; 	    /* default disable polling function */
@@ -235,7 +236,6 @@ redund_handle_ttys() /* child process ok */
                     infop->first_servertime = sys_info.uptime - 1;
                     servp->last_servertime = (time_t)((int32_t)(sys_info.uptime - 1));
                 }
-
                 if ( sndx < 0 )
                 {
                     sysinfo(&sys_info);
@@ -246,13 +246,15 @@ redund_handle_ttys() /* child process ok */
                     }
                     if (((time_t)((int32_t)sys_info.uptime)-servp->last_servertime)>timeout_time)
                     {
+#if 0
                         infop->first_servertime = 0;
                         infop->state = REDUND_REMOTE_LISTEN;
                         infop->time_out = sys_info.uptime;
 						servp->start_item = 0;
+#endif
                     }
                 }
-    		    
+
                 FD_SET(polling_fd, &rfd);
                 if ( polling_fd > maxfd )
                     maxfd = polling_fd;
@@ -266,6 +268,25 @@ redund_handle_ttys() /* child process ok */
 
             if (infop->state >= REDUND_RW_DATA)
             {
+		pthread_mutex_lock(&Gmutex);
+		if ((Glost_cnt == 2) && (infop->stop_tx == 0)) {
+			infop->redund.data.ack = 0;
+			infop->redund.data.seq = 0;
+			infop->redund.data.nport_ack = 0;
+			infop->redund.cmd.ack = 0;
+			infop->redund.cmd.seq = 0;
+			infop->redund.cmd.nport_ack = 0;
+			infop->stop_tx = 1;
+			infop->mpt_datakeep = 0;
+			infop->mpt_dataofs = 0;
+		} 
+	
+		if (infop->stop_tx) {
+			if (infop->redund.connect[0] || infop->redund.connect[1]) {
+				infop->stop_tx = 0;				
+			}	
+		}
+
                 if (infop->mpt_fd > maxfd)
                     maxfd = infop->mpt_fd;
 
@@ -281,7 +302,7 @@ redund_handle_ttys() /* child process ok */
 	       	        if (infop->redund.sock_cmd[1] > maxfd)
     	       	        maxfd = infop->redund.sock_cmd[1];
 				}
-                if ( infop->mpt_datakeep )
+                if ((infop->mpt_datakeep) && (!infop->stop_tx))
                 {
 					if (infop->redund.connect[0]) {
                     	FD_SET(infop->redund.sock_data[0], &wfd);
@@ -314,19 +335,20 @@ redund_handle_ttys() /* child process ok */
 				if (infop->redund.connect[1]) {
                 	FD_SET(infop->redund.sock_cmd[1], &rfd);
 				}
-            }
+		pthread_mutex_unlock(&Gmutex);
+           }
         }
         if (tcp_wait_count)
         {
             tm.tv_sec = 0;
             tm.tv_usec = 20000;
         }
+
 		cnt++;
 		cnt++;
-        if ((j= select(maxfd+1, &rfd, &wfd, &efd, &tm)) <= 0 )
-        {
+        if ((j= select(maxfd+1, &rfd, &wfd, &efd, &tm)) <= 0 )       
             continue;
-        }
+
 		cnt++;
         for ( i=0, infop=&ttys_info[0]; i<ttys; i+=1, infop+=1 )
         {
@@ -392,6 +414,7 @@ redund_handle_ttys() /* child process ok */
 
                             sysinfo(&sys_info);
                             infop->tty_used_timestamp = sys_info.uptime;
+			    Glost_cnt = 0;
                             continue;
                         case LOCAL_CMD_TTY_UNUSED:  /* when utility calling close(fd) */
 #ifdef SSL_ON
@@ -453,14 +476,15 @@ redund_handle_ttys() /* child process ok */
 							infop->redund.reconnect[0] = 0;							
 							infop->redund.reconnect[1] = 0;							
 							Gsession_cnt = 0;
-
                             continue;
                         }
                     }
                 }
             }
+
             if ( infop->state < REDUND_RW_DATA )
                 continue;
+
 			ret = do_redund_recv_cmd(infop, cmd_buf, &rfd);
             if ( FD_ISSET(infop->mpt_fd, &rfd) )
             {
@@ -472,6 +496,7 @@ redund_handle_ttys() /* child process ok */
                     infop->mpt_datakeep += n;
             }
 			ret = do_redund_recv_data(infop, servp ,&sys_info ,&rfd);
+
 #if 0
 			if (ret < 0 && ret == -2) {
         		for (k = 0, infop_tmp = &ttys_info[0]; k < ttys; k += 1, infop_tmp += 1) {
@@ -491,6 +516,7 @@ redund_handle_ttys() /* child process ok */
 				}
 			}
 #endif
+
             if ( FD_ISSET(infop->mpt_fd, &wfd) )
             {
                 n = write(infop->mpt_fd,
@@ -506,6 +532,7 @@ redund_handle_ttys() /* child process ok */
                 }
             }
 			ret = do_redund_send_data(infop, servp ,&sys_info ,&wfd);
+
 #if 0
        		for (k = 0, infop_tmp = &ttys_info[0]; k < ttys; k += 1, infop_tmp += 1) {
            		if (infop_tmp->redund.connect[0] > 0 || infop_tmp->redund.connect[1] > 0) {
@@ -514,7 +541,7 @@ redund_handle_ttys() /* child process ok */
 				}
 			}
 #else
-			do_redund_reconnect(infop);//
+			do_redund_reconnect(infop);
 #endif			
         }
         if ( polling_time == 0 )
@@ -630,12 +657,9 @@ TTYINFO *	infop;
 
     if (infop->redund.sock_data[1] >= 0) {
         infop->redund.data_open[1] = 1;
-    } else {
-		//printf("[AP] Socket data two fail\n");
-	}
+    } 
 	/* open first cmd socket */
     infop->redund.sock_cmd[0] = socket(af, SOCK_STREAM, 0);
-
     if (infop->redund.sock_cmd[0] >= 0) {
         if (setsockopt(infop->redund.sock_cmd[0], SOL_SOCKET, 
 					   SO_KEEPALIVE, (char *)&on, sizeof(on)) < 0) {
@@ -702,9 +726,7 @@ TTYINFO *	infop;
 		}
 #endif
         infop->redund.cmd_open[1] = 1;
-    } else {
-		//printf("[AP] Socket cmd two fail\n");
-	}
+    }
 	/* check the first connection ok or no */
     if ((infop->redund.sock_data[0] < 0) || (infop->redund.sock_cmd[0] < 0))
     {
@@ -835,7 +857,7 @@ TTYINFO *	infop;
 						infop->redund.connect[0] = 1;
 						infop->redund.session = Gsession;
 					} else {
-						infop->redund.connect[0] = 0;
+						infop->redund.connect[0] = 0;					
 					}
 				} else {
 					infop->redund.connect[0] = 0;
@@ -923,7 +945,6 @@ TTYINFO *	infop;
     if ( (childpid = fork()) == 0 )
     {	/* child process */
         msg.tcp_wait_id = infop->tcp_wait_id;
-        //close(pipefd[0]);
         close(infop->pipe_port[0]);
 #ifdef SSL_ON
         if (infop->ssl_enable)
@@ -933,15 +954,13 @@ TTYINFO *	infop;
             infop->pssl = NULL;
         }
 #endif
-        close(infop->redund.sock_data[1]);
-        close(infop->redund.sock_cmd[1]);
         close(infop->redund.sock_data[0]);
         close(infop->redund.sock_cmd[0]);
+        close(infop->redund.sock_data[1]);
+        close(infop->redund.sock_cmd[1]);
         sleep(1);
         msg.status = CLOSE_OK;
         msg.infop = infop;
-        //write(pipefd[1], (char *)&msg, sizeof(ConnMsg));
-        //close(pipefd[1]);
         write(infop->pipe_port[1], (char *)&msg, sizeof(ConnMsg));
         close(infop->pipe_port[1]);
         exit(0);
@@ -970,6 +989,11 @@ TTYINFO *	infop;
         close(infop->redund.sock_cmd[0]);
         close(infop->redund.sock_data[1]);
         close(infop->redund.sock_cmd[1]);
+	infop->redund.sock_data[0] = -1;
+	infop->redund.sock_cmd[0] = -1;
+	infop->redund.sock_data[1] = -1;
+	infop->redund.sock_cmd[1] = -1;
+
         infop->local_tcp_port = 0;
         infop->local_cmd_port = 0;
     }
@@ -996,12 +1020,19 @@ redund_connect_check(TTYINFO *infopp)
 		infop->redund.connect[0] = msg.connect[0];
 		infop->redund.connect[1] = msg.connect[1];
 		if (!infop->redund.connect[0]) {
+			Glost_cnt++;
 			close(infop->redund.sock_data[0]);
 			close(infop->redund.sock_cmd[0]);
+			infop->redund.sock_data[0] = -1;
+			infop->redund.sock_cmd[0] = -1;
+
 		}
 		if (!infop->redund.connect[1]) {
+			Glost_cnt++;
 			close(infop->redund.sock_data[1]);
 			close(infop->redund.sock_cmd[1]);
+			infop->redund.sock_data[1] = -1;
+			infop->redund.sock_cmd[1] = -1;
 		}
         if ( (infop->state == REDUND_TCP_WAIT)&&(infop->tcp_wait_id == msg.tcp_wait_id) )
         {
@@ -1009,12 +1040,21 @@ redund_connect_check(TTYINFO *infopp)
 			socklen = (infop->af == AF_INET) ? sizeof(local_sin) : sizeof(local_sin6);
             if ( msg.status == CONNECT_OK )
             {
-                getsockname(infop->redund.sock_data[0], ptr, &socklen);
+        		if (infop->redund.connect[0])
+        			getsockname(infop->redund.sock_data[0], ptr, &socklen);
+        		else
+        			getsockname(infop->redund.sock_data[1], ptr, &socklen);
+
 				if(infop->af == AF_INET)
 	                infop->local_tcp_port = ntohs(local_sin.sin_port);
 				else
 					infop->local_tcp_port = ntohs(local_sin6.sin6_port);
-                getsockname(infop->redund.sock_cmd[0], ptr, &socklen);
+
+				if (infop->redund.connect[0])
+        			getsockname(infop->redund.sock_cmd[0], ptr, &socklen);
+        		else
+        			getsockname(infop->redund.sock_cmd[1], ptr, &socklen);
+
 				if(infop->af == AF_INET)
 					infop->local_cmd_port = ntohs(local_sin.sin_port);
 				else
@@ -1115,6 +1155,7 @@ char *	msg;
     time_t		t;
     struct tm	*tt;
     char		tmp[80];
+    unsigned long sz;
 
     if (Restart_daemon)
         return;
@@ -1133,7 +1174,13 @@ char *	msg;
         fputs(tmp, fd);
         fputs(msg, fd);
         fputs("\n", fd);
+        sz = ftell(fd);
         fclose(fd);
+
+        if(sz > (1024*1024*1024)){
+        	sprintf(tmp, "mv --backup=numbered -b %s %s.old", EventLog, EventLog);
+        	system(tmp);
+        }
     }
 }
 #endif
@@ -1146,9 +1193,11 @@ int redund_data_init(int fd, struct expect_struct *expect)
 
     len1 = len2 = len3 = 0; /* Redundant SYNC Step len */
 
+    if (fd < 0)
+	return -1;
+
     len1 = recv(fd, rbuffer, HEADER_LEN, 0);
 	if (len1 != 12) {
-
 		return -1;
 	}
 	if (Gsession_cnt == 0) {
@@ -1158,10 +1207,8 @@ int redund_data_init(int fd, struct expect_struct *expect)
 #if 1
 	memcpy(wbuffer, rbuffer, HEADER_LEN);
 	wbuffer[5] = Gsession;	
-
-    len2 = send(fd, wbuffer, HEADER_LEN, 0);
+        len2 = send(fd, wbuffer, HEADER_LEN, 0);
 	if (len2 != 12) {
-
 		return -1;
 	}
 
@@ -1181,15 +1228,16 @@ int redund_cmd_init(int fd, struct expect_struct *expect)
 
     len1 = len2 = len3 = 0; /* Redundant SYNC Step len */
  
+    if (fd < 0)
+	return -1;
+
     len1 = recv(fd, rbuffer, HEADER_LEN, 0);
 	if (len1 != 12) {
-
 		return -1;
 	}
 
 	memcpy(wbuffer, rbuffer, HEADER_LEN);
 	wbuffer[5] = Gsession;	
-
     len2 = send(fd, wbuffer, HEADER_LEN, 0);
 	if (len2 != 12) {
 		return -1;
@@ -1197,7 +1245,6 @@ int redund_cmd_init(int fd, struct expect_struct *expect)
 
     len3 = recv(fd, rbuffer, HEADER_LEN, 0);
 	if (len3 != 12) {
-		
 		return -1;
 	}
 
@@ -1242,18 +1289,20 @@ int redund_send_cmd(int fd, int fd_bk, const char *sbuf, ssize_t len, struct exp
     char dbuf[2048], rbuffer[80];
     struct redund_packet resp;
 
+    total_len1 = total_len2 = 0;
+	
     ret = redund_add_hdr(sbuf, dbuf, len, expect);
 	
 	/* send command to NPort */
-	if (fd)
-    	total_len1 = send(fd, dbuf, HEADER_LEN + len, 0);
-	if (fd_bk)
+	if (fd) 
+	    	total_len1 = send(fd, dbuf, HEADER_LEN + len, 0);
+
+	if (fd_bk) 
 		total_len2 = send(fd_bk, dbuf, HEADER_LEN + len, 0);
 
     if ((total_len1 < 0) || (total_len1 != HEADER_LEN + len)) {
     	if ((total_len2 < 0) || (total_len2 != HEADER_LEN + len)) {
         	//printf("redundant send_cmd fail\n");
-
         	return 0;
 		}
     }
@@ -1303,6 +1352,7 @@ int redund_recv_cmd(int fd, int fd_bk ,char *sbuf, ssize_t len, struct expect_st
 		
     pkt.hdr = (struct redund_hdr *) dbuf;
 	pkt.data = (char *) &dbuf[HEADER_LEN];
+
 #if 1
 	if ((pkt.hdr->seq_no != expect->ack) && ((pkt.hdr->flags & REDUNDANT_PUSH))) { 
 		return 0;	
@@ -1364,23 +1414,37 @@ int redund_recv_cmd(int fd, int fd_bk ,char *sbuf, ssize_t len, struct expect_st
                 if (infop->redund.cmd.repush_seq[0] == infop->redund.cmd.repush_seq[1]) {
                     ;
                 } else {
+#if 1
                     expect->ack = pkt.hdr->seq_no + 1;
                     resp.hdr->ack_no = expect->ack;
                     expect->seq = pkt.hdr->ack_no;
+#else
+                    resp.hdr->ack_no = pkt.hdr->seq_no + 1;
+		    resp.hdr->seq_no = pkt.hdr->seq_no;
+                    expect->ack = pkt.hdr->seq_no + 1;
+                    expect->seq = pkt.hdr->seq_no + 1;
+#endif
                 }
+	       ret = send(fd, respbuf, HEADER_LEN, 0);
             }
             if (fd_bk) {
                 infop->redund.cmd.repush_seq[1] = pkt.hdr->seq_no;
                 if (infop->redund.cmd.repush_seq[1] == infop->redund.cmd.repush_seq[0]) {
                     ;
                 } else {
+#if 1
                     expect->ack = pkt.hdr->seq_no + 1;
                     resp.hdr->ack_no = expect->ack;
                     expect->seq = pkt.hdr->ack_no;
+#else
+                    resp.hdr->ack_no = pkt.hdr->seq_no + 1;
+		    resp.hdr->seq_no = pkt.hdr->seq_no;
+                    expect->ack = pkt.hdr->seq_no + 1;
+                    expect->seq = pkt.hdr->seq_no + 1;
+#endif
                 }
+                ret = send(fd_bk, respbuf, HEADER_LEN, 0);
             }
-            ret = send(fd, respbuf, HEADER_LEN, 0);
-            ret = send(fd_bk, respbuf, HEADER_LEN, 0);
         }
 #if MOXA_DEBUG
         if (fd)
@@ -1414,6 +1478,7 @@ int redund_recv_cmd(int fd, int fd_bk ,char *sbuf, ssize_t len, struct expect_st
     resp.hdr->len = HEADER_LEN;
 
 	if (pkt.data[0] == 0x27) {
+
 		memcpy(resp.data, pkt.data, pkt.hdr->len - HEADER_LEN);
 		resp.data[0] = 0x28;
 		resp.hdr->flags |= REDUNDANT_PUSH;
@@ -1421,20 +1486,29 @@ int redund_recv_cmd(int fd, int fd_bk ,char *sbuf, ssize_t len, struct expect_st
 		expect->nport_ack = expect->seq + 1;
 		resp.hdr->seq_no = expect->seq;
 		resp.hdr->len = pkt.hdr->len;
+
 	} else {
         expect->ack = pkt.hdr->seq_no + 1;
         resp.hdr->ack_no = expect->ack;
+
     }
 
+#if 0
+    resp.hdr->seq_no = pkt.hdr->seq_no;	
+    resp.hdr->ack_no = pkt.hdr->seq_no+1;
+    expect->ack = pkt.hdr->seq_no+1;
+    expect->seq = pkt.hdr->seq_no+1;
+    expect->nport_ack = pkt.hdr->seq_no+1;
+#endif
+ 	
 re_send:
-
-	if (fd)
-    	total_len1 = send(fd, respbuf, resp.hdr->len, 0);
-	if (fd_bk)
-		total_len2 = send(fd_bk, respbuf, resp.hdr->len, 0);
+	if (fd) 
+    		total_len1 = send(fd, respbuf, resp.hdr->len, 0);
+	
+	if (fd_bk) 
+		total_len2 = send(fd_bk, respbuf, resp.hdr->len, 0);	
 
     if (total_len1 < 0 || total_len2 < 0) {
-
         goto re_send;
     }
 
@@ -1478,22 +1552,17 @@ int redund_send_data(int fd, int fd_bk, const char *sbuf, ssize_t len, struct ex
     int ret, total_len1, total_len2;
     struct _redund_packet pkt;
     char dbuf[2048], rbuffer[80];
-
 	total_len1 = 0;
 
     ret = redund_add_hdr_data(fd, sbuf, dbuf, len, expect, infop);
 	
     pkt.hdr = (struct redund_hdr *) dbuf;
 
-    if (ret < 0) {
-        //printf("redundant send fail\n");
-
-        return ret;
-    }
 	/* send command to NPort */
-	if (fd)
+	if (fd) 
 		total_len1 = send(fd, dbuf, HEADER_LEN + len, MSG_DONTWAIT);
-	if (fd_bk)
+	
+	if (fd_bk) 
 		total_len2 = send(fd_bk, dbuf, HEADER_LEN + len, MSG_DONTWAIT);
 
 	if ((total_len1 == total_len2))
@@ -1584,8 +1653,6 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
 #endif
 #endif
 
-
-
 	if ((pkt.hdr->seq_no != expect->ack) && ((pkt.hdr->flags & REDUNDANT_PUSH))) { 
 		if (fd) {
 			total_len += recv(fd, dbuf2, pkt.hdr->len - HEADER_LEN, 0);
@@ -1670,30 +1737,30 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
 			if (infop->redund.data.repush_seq[0] == infop->redund.data.repush_seq[1]) {
 				total_len += recv(fd, dbuf2, pkt.hdr->len - HEADER_LEN, 0);
 			} else {
-   	    	    total_len += recv(fd, sbuf, pkt.hdr->len - HEADER_LEN, 0);
-		        expect->ack = pkt.hdr->seq_no + 1;
-    		    resp.hdr->ack_no = expect->ack;
-        		expect->seq = pkt.hdr->ack_no;
-	    	    infop->redund.host_ack = 1;
-        	    infop->redund.host_ack = 0;
+	   	    	    	total_len += recv(fd, sbuf, pkt.hdr->len - HEADER_LEN, 0);
+			        expect->ack = pkt.hdr->seq_no + 1;
+		    		resp.hdr->ack_no = expect->ack;
+		        	expect->seq = pkt.hdr->ack_no;
+			    	infop->redund.host_ack = 1;
+		        	infop->redund.host_ack = 0;
 			}
+		        ret = send(fd, respbuf, resp.hdr->len, 0);
 		}
 		if (fd_bk) {
 			infop->redund.data.repush_seq[1] = pkt.hdr->seq_no;
 			if (infop->redund.data.repush_seq[1] == infop->redund.data.repush_seq[0]) {
 				total_len += recv(fd_bk, dbuf2, pkt.hdr->len - HEADER_LEN, 0);
 			} else {
-   	    	    total_len += recv(fd_bk, sbuf, pkt.hdr->len - HEADER_LEN, 0);
-		        expect->ack = pkt.hdr->seq_no + 1;
-    		    resp.hdr->ack_no = expect->ack;
-       			expect->seq = pkt.hdr->ack_no;
-	    	    infop->redund.host_ack = 1;
-    	        infop->redund.host_ack = 0;
+		    	    	    total_len += recv(fd_bk, sbuf, pkt.hdr->len - HEADER_LEN, 0);
+				    expect->ack = pkt.hdr->seq_no + 1;
+		    		    resp.hdr->ack_no = expect->ack;
+				    expect->seq = pkt.hdr->ack_no;
+			    	    infop->redund.host_ack = 1;
+		      	            infop->redund.host_ack = 0;
 			}
+		        ret = send(fd_bk, respbuf, resp.hdr->len, 0);
 		}
 
-        ret = send(fd_bk, respbuf, resp.hdr->len, 0);
-        ret = send(fd, respbuf, resp.hdr->len, 0);
 #if 0
 		if (infop->redund.reconnect[0]) { 
 		/* net-one unplug and plug again. we need to recv data from net-two 
@@ -1802,7 +1869,7 @@ int do_redund_send_data(TTYINFO *infop, SERVINFO *servp, struct sysinfo *sys_inf
     	}
 	}
 	else if (FD_ISSET(infop->redund.sock_data[1], wfd)) {
-		if (!infop->redund.wlen && infop->mpt_datakeep)
+		if (!infop->redund.wlen && infop->mpt_datakeep) 
 			infop->redund.wlen = redund_send_data(infop->redund.sock_data[0],
 								 infop->redund.sock_data[1],
 							     infop->mpt_bufptr + infop->mpt_dataofs, 
@@ -1825,7 +1892,10 @@ int do_redund_recv_data(TTYINFO *infop, SERVINFO *servp, struct sysinfo *sys_inf
 	m = 0;
 	n = 0;
 
+	pthread_mutex_lock(&Gmutex);
 	if (infop->redund.connect[0] && FD_ISSET(infop->redund.sock_data[0], rfd)) {
+		pthread_mutex_unlock(&Gmutex);
+
 	    m = infop->sock_datakeep + infop->sock_dataofs;
 		n = redund_recv_data(infop->redund.sock_data[0], 
 							 0,
@@ -1838,23 +1908,28 @@ int do_redund_recv_data(TTYINFO *infop, SERVINFO *servp, struct sysinfo *sys_inf
             sysinfo(sys_info);
             servp = &serv_info[infop->serv_index];
             servp->last_servertime = (time_t)((int32_t)(sys_info->uptime - 1));
-
 			return n;
         } else if (n < 0) {
 #if MOXA_DEBUG
 			printf("[AP] redund_recv_data : net-one recv fail %s\n", infop->ttyname2);
 #endif
-   			if (infop->redund.connect[1] && infop->redund.connect[0] != 0) {
-        		infop->sock_datakeep = 0;
-				infop->redund.disdata[0] = 1;
+   			pthread_mutex_lock(&Gmutex);
+			//if (infop->redund.connect[1] && infop->redund.connect[0] != 0) {
+			if (infop->redund.connect[0]) {
+        			infop->sock_datakeep = 0;
+				infop->redund.connect[0] = 0;
 				close(infop->redund.sock_cmd[0]);
 				close(infop->redund.sock_data[0]);
-				infop->redund.connect[0] = 0;
+				infop->redund.sock_cmd[0] = -1;
+				infop->redund.sock_data[0] = -1;
 			}
+			pthread_mutex_unlock(&Gmutex);
 			return 0;
 		}
 	}
 	else if (infop->redund.connect[1] && FD_ISSET(infop->redund.sock_data[1], rfd)) {
+		pthread_mutex_unlock(&Gmutex);
+
 	    m = infop->sock_datakeep + infop->sock_dataofs;
 		n = redund_recv_data(0, 
 							 infop->redund.sock_data[1],
@@ -1867,22 +1942,26 @@ int do_redund_recv_data(TTYINFO *infop, SERVINFO *servp, struct sysinfo *sys_inf
             sysinfo(sys_info);
             servp = &serv_info[infop->serv_index];
             servp->last_servertime = (time_t)((int32_t)(sys_info->uptime - 1));
-
 			return n;
         } else if (n < 0) {
 #if MOXA_DEBUG
 			printf("[AP] redund_recv_data : net-two recv fail %s\n", infop->mpt_name);
 #endif
-   			if (infop->redund.connect[0] && infop->redund.connect[1] != 0) {
-		     	infop->sock_datakeep = 0;
-				infop->redund.disdata[1] = 1;
+ 			pthread_mutex_lock(&Gmutex);
+  			//if (infop->redund.connect[0] && infop->redund.connect[1] != 0) {
+			if (infop->redund.connect[1]) {
+			     	infop->sock_datakeep = 0;
+				infop->redund.connect[1] = 0;
 				close(infop->redund.sock_cmd[1]);
 				close(infop->redund.sock_data[1]);
-				infop->redund.connect[1] = 0;
+				infop->redund.sock_cmd[1] = -1;
+				infop->redund.sock_data[1] = -1;
 			}
+			pthread_mutex_unlock(&Gmutex);
 			return 0;
 		}
 	}
+	pthread_mutex_unlock(&Gmutex);
 	return n;
 }
 
@@ -1904,42 +1983,60 @@ int do_redund_recv_cmd(TTYINFO *infop, char *cmd_buf, fd_set *rfd)
 	n = 0;
 
 	if (1) {
+		pthread_mutex_lock(&Gmutex);
 		if (infop->redund.connect[0] && FD_ISSET(infop->redund.sock_cmd[0], rfd)) {
+			pthread_mutex_unlock(&Gmutex);
 				len = redund_recv_cmd(infop->redund.sock_cmd[0],
 								  0,
 								  infop->sock_cmdbuf,
 			    				  CMD_REDUND_SIZE, 
 								  &infop->redund.cmd, infop);
 			if (len < 0) {
+			pthread_mutex_lock(&Gmutex);
+			Glost_cnt = (Glost_cnt == 2) ? 2 : (++Glost_cnt & 0x3);
+
 #if MOXA_DEBUG
 			printf("[AP] redund_recv_cmd : net-one recv fail %s\n", infop->ttyname2);
 #endif
-   				if (infop->redund.connect[1] && infop->redund.connect[0] != 0) {
+   				//if (infop->redund.connect[1] && infop->redund.connect[0] != 0) {
+				if (infop->redund.connect[0]) {
 					close(infop->redund.sock_cmd[0]);
 					close(infop->redund.sock_data[0]);
 					infop->redund.connect[0] = 0;
+					infop->redund.sock_cmd[0] = -1;
+					infop->redund.sock_data[0] = -1;
 				}
+				pthread_mutex_unlock(&Gmutex);
 				return 0;
 			}
 		}
 		else if (infop->redund.connect[1] && FD_ISSET(infop->redund.sock_cmd[1], rfd)) {
+			pthread_mutex_unlock(&Gmutex);
 			len = redund_recv_cmd(0,
 								  infop->redund.sock_cmd[1],
 								  infop->sock_cmdbuf,
 			    				  CMD_REDUND_SIZE, 
 								  &infop->redund.cmd, infop);
 			if (len < 0) {
+				pthread_mutex_lock(&Gmutex);
+				Glost_cnt = (Glost_cnt == 2) ? 2 : (++Glost_cnt & 0x3);
+
 #if MOXA_DEBUG
 				printf("[AP] redund_recv_cmd : net-two recv fail %s\n", infop->mpt_name);
 #endif 
-   				if (infop->redund.connect[0] && infop->redund.connect[1] != 0) {
+   				//if (infop->redund.connect[0] && infop->redund.connect[1] != 0) {
+				if (infop->redund.connect[1]) {
 					close(infop->redund.sock_cmd[1]);
 					close(infop->redund.sock_data[1]);
 					infop->redund.connect[1] = 0;
+					infop->redund.sock_cmd[1] = -1;
+					infop->redund.sock_data[1] = -1;
 				}
+				pthread_mutex_unlock(&Gmutex);
 				return 0;
 			}
 		}
+		pthread_mutex_unlock(&Gmutex);
 
         n = 0;
         while (len > 0) {
@@ -1993,6 +2090,20 @@ int do_redund_recv_cmd(TTYINFO *infop, char *cmd_buf, fd_set *rfd)
 	return 0;
 }
 
+void redund_init_fail(TTYINFO *infop, int lan_num)
+{
+	close(infop->redund.sock_data[lan_num]);
+	close(infop->redund.sock_cmd[lan_num]);
+
+	pthread_mutex_lock(&Gmutex);
+	infop->redund.sock_data[lan_num] = -1;
+	infop->redund.sock_cmd[lan_num] = -1;
+	infop->redund.data_open[lan_num] = 0;
+	infop->redund.cmd_open[lan_num] = 0;
+	infop->redund.connect[lan_num] = 0;
+	pthread_mutex_unlock(&Gmutex);
+}
+
 int redund_reconnect(void *infopp)
 {
 	int ret;
@@ -2001,71 +2112,71 @@ int redund_reconnect(void *infopp)
 	TTYINFO *infop;
 	int		inter = 1, i;
 	struct timeval start, end;
+	struct sigaction act;
 
 	infop = (TTYINFO *) infopp;
 
 	on = 1;
 
-	if (infop->redund.disdata[0] || infop->redund.disdata[1]) {
-	}
+	// ignore SIGPIPE
+	act.sa_handler = SIG_IGN;
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = 0;
+	sigaction(SIGPIPE, &act, NULL);
+
+	pthread_detach(pthread_self());
+
 	while (1) {
+		sleep(1);
 #if 1	
 	if (infop->redund.close[0] || infop->redund.close[1]) {
 		pthread_exit(NULL);
 	}
 #endif
+
+	pthread_mutex_lock(&Gmutex);
+	if (infop->redund.connect[0] && infop->redund.connect[1]) {
+		infop->redund.thread_id[0] = 0;
+		infop->redund.thread[0] = 0;
+		pthread_mutex_unlock(&Gmutex);
+		pthread_exit(NULL);
+		break;
+	}else
+		pthread_mutex_unlock(&Gmutex);
+
+	pthread_mutex_lock(&Gmutex);
 	if (!infop->redund.connect[0]) {
+		pthread_mutex_unlock(&Gmutex);
 		/* socket open one-line cmd and data port */
 		//close(infop->redund.sock_cmd[0]);
 		//close(infop->redund.sock_data[0]);
-		infop->redund.sock_data[0] = socket(infop->af, SOCK_STREAM, 0);
-			
-		if (infop->redund.sock_data[0] >= 0) {
-#if 0
-        	if (strlen(infop->scope_id) > 0) {
-            	if (setsockopt(infop->redund.sock_data[0], SOL_SOCKET, SO_BINDTODEVICE,
-                       nfop->scope_id, strlen(infop->scope_id)) < 0) {
-                	log_event("Set Re-TCP bind to device fail !");
-            	}	
-        	}
-#endif
-			infop->redund.data_open[0] = 1;
-		}
-		
+		infop->redund.sock_data[0] = socket(infop->af, SOCK_STREAM, 0);	
 		infop->redund.sock_cmd[0] = socket(infop->af, SOCK_STREAM, 0);
 
     	if (infop->redund.sock_cmd[0] >= 0) {
-	        if (setsockopt(infop->redund.sock_cmd[0], SOL_SOCKET,
-                       SO_KEEPALIVE, &on, sizeof(on)) < 0) {
-    	        log_event("Set TCP keep alive fail !");
-        	}
-	        ret = setsockopt(infop->redund.sock_cmd[0], SOL_TCP, TCP_KEEPIDLE,
-    	                     &Gkeep_idle,
-        	                 sizeof(Gkeep_idle));
-        	if (ret < 0)
-            	printf("setsockopt SO_KEEPIDLE error! %d\n", ret);
+			if (setsockopt(infop->redund.sock_cmd[0], SOL_SOCKET,
+		               SO_KEEPALIVE, &on, sizeof(on)) < 0) {
+	    	        log_event("Set TCP keep alive fail !");
+			}
+			ret = setsockopt(infop->redund.sock_cmd[0], SOL_TCP, TCP_KEEPIDLE,
+	    	                     &Gkeep_idle,
+			                 sizeof(Gkeep_idle));
+			if (ret < 0)
+		    	printf("setsockopt SO_KEEPIDLE error! %d\n", ret);
 
-        	ret = setsockopt(infop->redund.sock_cmd[0], SOL_TCP, TCP_KEEPINTVL,
-            	             &(Gkeep_interval),
-                	         sizeof(Gkeep_interval));
-	        if (ret < 0)
-    	        printf("setsockopt SO_KEEPINTVL error! %d\n", ret);
+			ret = setsockopt(infop->redund.sock_cmd[0], SOL_TCP, TCP_KEEPINTVL,
+		    	             &(Gkeep_interval),
+		        	         sizeof(Gkeep_interval));
+			if (ret < 0)
+	    	        printf("setsockopt SO_KEEPINTVL error! %d\n", ret);
 
-        	ret = setsockopt(infop->redund.sock_cmd[0], SOL_TCP, TCP_KEEPCNT,
-            	             &(Gkeep_count),
-                	         sizeof(Gkeep_count));
-	        if (ret < 0)
-    	    	printf("setsockopt SO_KEEPCNT error! %d\n", ret);
-#if 0	
-        	if (strlen(infop->scope_id) > 0) {
-            	if (setsockopt(infop->redund.sock_cmd[0], SOL_SOCKET,
-                           SO_BINDTODEVICE, infop->scope_id, strlen(infop->scope_id)) < 0) {
-                	log_event("Set TCP bind to device fail !");
-            	}
-        	}
-#endif
-			infop->redund.cmd_open[0] = 1;
-		}
+			ret = setsockopt(infop->redund.sock_cmd[0], SOL_TCP, TCP_KEEPCNT,
+		    	             &(Gkeep_count),
+		        	         sizeof(Gkeep_count));
+			if (ret < 0)
+	    	    	printf("setsockopt SO_KEEPCNT error! %d\n", ret);
+
+	}
 		/* connect one-line cmd and data port */
         if (infop->af == AF_INET) {
             sock.sin.sin_family = AF_INET;
@@ -2075,100 +2186,67 @@ int redund_reconnect(void *infopp)
         if ((ret = connect_nonb(infop->redund.sock_cmd[0], (struct sockaddr_in*)&sock, sizeof(sock), RE_TIME)) >= 0) {
 	        if (infop->af == AF_INET) {
 	        	sock.sin.sin_family = AF_INET;
-    	        sock.sin.sin_addr.s_addr = *(u_long*)infop->ip6_addr;
-        	    sock.sin.sin_port = htons(infop->tcp_port);
-			}
-
-            if (connect_nonb(infop->redund.sock_data[0], (struct sockaddr_in*)&sock, sizeof(sock), RE_TIME) >= 0) {
+	    	        sock.sin.sin_addr.s_addr = *(u_long*)infop->ip6_addr;
+	      		sock.sin.sin_port = htons(infop->tcp_port);
+		}
+	            if ((ret = connect_nonb(infop->redund.sock_data[0], (struct sockaddr_in*)&sock, sizeof(sock), RE_TIME)) >= 0) {
 				if ((redund_data_init(infop->redund.sock_data[0], &infop->redund.data)) > 0) {
-                	if ((redund_cmd_init(infop->redund.sock_cmd[0], &infop->redund.cmd)) > 0) {
+                			if ((redund_cmd_init(infop->redund.sock_cmd[0], &infop->redund.cmd)) > 0) {
 #if MOXA_DEBUG
 						printf("[AP] redund_reconnect net-one ok %s(%d)\n", infop->ttyname2, atoi(infop->ttyname));
 #endif
-						infop->redund.reconnect[0] = 1;
-						infop->redund.reconnect[1] = 0;
-						infop->redund.thread_id[0] = 0;
-						infop->redund.thread[0] = 0;
+						pthread_mutex_lock(&Gmutex);
+						Glost_cnt--;
 						infop->redund.connect[0] = 1;
-						infop->redund.disdata[0] = 0;
-						Gport_cnt--;
-						if (!Gport_cnt) 
-							printf("[NPORT]Net-one has reconnected again\n");
-#if 0
-							gettimeofday(&start, NULL);
-							while (1) {						
-								gettimeofday(&end, NULL);
-								if (end.tv_sec - start.tv_sec >= 3)
-									break;
-							}
-							for (i = 0; i < Gport_num; i++) {
-								ttys_info[i].redund.thread[0] = 0;
-                        		ttys_info[i].redund.connect[0] = 1;
-							}
-							Gport_num = 0;
-#endif
-
-						pthread_exit(NULL);
-						break;
-                    } else {
-						ret = close(infop->redund.sock_data[0]);
-						ret = close(infop->redund.sock_cmd[0]);
+						infop->redund.data_open[0] = 1;
+						infop->redund.cmd_open[0] = 1;
+						pthread_mutex_unlock(&Gmutex);
+                    			} else {
+						redund_init_fail(infop, 0);
 					}
-                } else {
-					ret = close(infop->redund.sock_data[0]);
-					ret = close(infop->redund.sock_cmd[0]);
+                		} else {
+					redund_init_fail(infop, 0);
 				}
 			} else {
-				ret = close(infop->redund.sock_data[0]);
-				ret = close(infop->redund.sock_cmd[0]);
+				redund_init_fail(infop, 0);
 			}
 		} else {	
-			ret = close(infop->redund.sock_data[0]);
-			ret = close(infop->redund.sock_cmd[0]);
+			redund_init_fail(infop, 0);
 		}	
-	} else if (!infop->redund.connect[1]) {
+	} else
+		pthread_mutex_unlock(&Gmutex);	
+
+	pthread_mutex_lock(&Gmutex);
+	if (!infop->redund.connect[1]) {
+		pthread_mutex_unlock(&Gmutex);
 		/* close two-line cmd and data port */
 		/* socket open two-line cmd and data port */
 		//close(infop->redund.sock_cmd[1]);
 		//close(infop->redund.sock_data[1]);
-		infop->redund.sock_data[1] = socket(infop->af, SOCK_STREAM, 0);
-		
-		if (infop->redund.sock_data[1] >= 0) {
-			infop->redund.data_open[1] = 1;
-		}
-		
+		infop->redund.sock_data[1] = socket(infop->af, SOCK_STREAM, 0);		
 		infop->redund.sock_cmd[1] = socket(infop->af, SOCK_STREAM, 0);
-    	if (infop->redund.sock_cmd[1] >= 0) {
-	        if (setsockopt(infop->redund.sock_cmd[1], SOL_SOCKET,
-                       SO_KEEPALIVE, (char *)&on, sizeof(on)) < 0) {
-    	        log_event("Set TCP keep alive fail !");
-        	}
-	        ret = setsockopt(infop->redund.sock_cmd[1], SOL_TCP, TCP_KEEPIDLE,
-    	                     &Gkeep_idle,
-        	                 sizeof(Gkeep_idle));
-        	if (ret < 0)
-            	printf("setsockopt SO_KEEPIDLE error! %d\n", ret);
+    		if (infop->redund.sock_cmd[1] >= 0) {
+			if (setsockopt(infop->redund.sock_cmd[1], SOL_SOCKET,
+		               SO_KEEPALIVE, (char *)&on, sizeof(on)) < 0) {
+		    	        log_event("Set TCP keep alive fail !");
+			}
+			ret = setsockopt(infop->redund.sock_cmd[1], SOL_TCP, TCP_KEEPIDLE,
+	    	                     &Gkeep_idle,
+			                 sizeof(Gkeep_idle));
+			if (ret < 0)
+			    	printf("setsockopt SO_KEEPIDLE error! %d\n", ret);
 
-        	ret = setsockopt(infop->redund.sock_cmd[1], SOL_TCP, TCP_KEEPINTVL,
-            	             &Gkeep_interval,
-                	         sizeof(Gkeep_interval));
-        	if (ret < 0)
-            	printf("setsockopt SO_KEEPINTVL error! %d\n", ret);
+			ret = setsockopt(infop->redund.sock_cmd[1], SOL_TCP, TCP_KEEPINTVL,
+		    	             &Gkeep_interval,
+		        	         sizeof(Gkeep_interval));
+			if (ret < 0)
+			    	printf("setsockopt SO_KEEPINTVL error! %d\n", ret);
 
-        	ret = setsockopt(infop->redund.sock_cmd[1], SOL_TCP, TCP_KEEPCNT,
-            	             &Gkeep_count,
-                	         sizeof(Gkeep_count));
-        	if (ret < 0)
-        		printf("setsockopt SO_KEEPCNT error! %d\n", ret);
-#if 0	
-        	if (strlen(infop->scope_id) > 0) {
-            	if (setsockopt(infop->redund.sock_cmd[1], SOL_SOCKET,
-                           SO_BINDTODEVICE, infop->scope_id, strlen(infop->scope_id)) < 0) {
-                	log_event("Set TCP bind to device fail !");
-            	}
-        	}
-#endif
-			infop->redund.cmd_open[1] = 1;
+			ret = setsockopt(infop->redund.sock_cmd[1], SOL_TCP, TCP_KEEPCNT,
+		    	             &Gkeep_count,
+		        	         sizeof(Gkeep_count));
+			if (ret < 0)
+				printf("setsockopt SO_KEEPCNT error! %d\n", ret);
 		}
 		/* connect two-line cmd and data port */
         if (infop->af == AF_INET) {
@@ -2179,52 +2257,69 @@ int redund_reconnect(void *infopp)
         if ((ret = connect_nonb(infop->redund.sock_cmd[1], (struct sockaddr_in*)&sock, sizeof(sock), RE_TIME)) >= 0) {
 	        if (infop->af == AF_INET) {
 	        	sock.sin.sin_family = AF_INET;
-    	        sock.sin.sin_addr.s_addr = *(u_long*)infop->redund.ip6_addr;
-        	    sock.sin.sin_port = htons(infop->tcp_port);
-			}
-            if (connect_nonb(infop->redund.sock_data[1], (struct sockaddr_in*)&sock, sizeof(sock), RE_TIME) >= 0) {
+    		        sock.sin.sin_addr.s_addr = *(u_long*)infop->redund.ip6_addr;
+     		    	sock.sin.sin_port = htons(infop->tcp_port);
+		}
+            if ((ret = connect_nonb(infop->redund.sock_data[1], (struct sockaddr_in*)&sock, sizeof(sock), RE_TIME)) >= 0) {
 				if ((redund_data_init(infop->redund.sock_data[1], &infop->redund.data)) > 0) {
-                    if ((redund_cmd_init(infop->redund.sock_cmd[1], &infop->redund.cmd)) > 0)  {
+                    			if ((redund_cmd_init(infop->redund.sock_cmd[1], &infop->redund.cmd)) > 0)  {
 #if MOXA_DEBUG
 						printf("[AP] redund_reconnect net-two ok %s\n", infop->ttyname2);
 #endif
-						infop->redund.reconnect[1] = 1;
-						infop->redund.reconnect[0] = 0;
-						infop->redund.thread_id[1] = 0;
-						infop->redund.thread[1] = 0;
+						pthread_mutex_lock(&Gmutex);
+						Glost_cnt--;
 						infop->redund.connect[1] = 1;
-						infop->redund.disdata[1] = 0;
-						Gport_cnt--;
-						if (!Gport_cnt) 
-							printf("[NPORT]Net-two has reconnected again\n");
-						pthread_exit(NULL);
-						break;
+						infop->redund.data_open[1] = 1;
+						infop->redund.cmd_open[1] = 1;
+						pthread_mutex_unlock(&Gmutex);
 
-                    } else {
-						ret = close(infop->redund.sock_data[1]);
-						ret = close(infop->redund.sock_cmd[1]);
+                    			} else {
+						redund_init_fail(infop, 1);
 					}
-                } else {
-					ret = close(infop->redund.sock_data[1]);
-					ret = close(infop->redund.sock_cmd[1]);
+		                } else {
+					redund_init_fail(infop, 1);
 				}
 			} else {
-				ret = close(infop->redund.sock_data[1]);
-				ret = close(infop->redund.sock_cmd[1]);
+				redund_init_fail(infop, 1);
 			}	
 		} else {
-			ret = close(infop->redund.sock_data[1]);
-			ret = close(infop->redund.sock_cmd[1]);
+			redund_init_fail(infop, 1);
 		}
-	}
+	}else
+		pthread_mutex_unlock(&Gmutex);
 	}
 }
 
+#if 1
 int do_redund_reconnect(TTYINFO * infop)
 {
 	int ret;
 
+	pthread_mutex_lock(&Gmutex);
+	if (!infop->redund.connect[0] || !infop->redund.connect[1]) {
+		if (!infop->redund.thread[0]) {
+			pthread_mutex_unlock(&Gmutex);
+create_again:
+			ret = pthread_create(&infop->redund.thread_id[0], NULL, (void *)redund_reconnect, (void *)infop);
+			if (ret != 0) {
+				goto create_again;
+			} else { 
+				pthread_mutex_lock(&Gmutex);
+				infop->redund.thread[0] = 1;
+				pthread_mutex_unlock(&Gmutex);
+			}
+		}
+	}	
+	pthread_mutex_unlock(&Gmutex);
+}
+#else
+int do_redund_reconnect(TTYINFO * infop)
+{
+	int ret;
+
+	pthread_mutex_lock(&Gmutex);
 	if (!infop->redund.connect[0] && !infop->redund.close[0] && !infop->redund.thread[0]) {
+		pthread_mutex_unlock(&Gmutex);
 create_again1:
 		ret = pthread_create(&infop->redund.thread_id[0], NULL, (void *)redund_reconnect, (void *)infop);
 		pthread_detach(infop->redund.thread_id[0]);
@@ -2234,13 +2329,13 @@ create_again1:
 #endif
 			goto create_again1;
 		} else { 
+			pthread_mutex_lock(&Gmutex);
 			infop->redund.thread[0] = 1;
-			Gport_cnt++;
-			if (Gport_cnt == 1)
-				printf("[NPORT]Net-one has Disconnected\n");
+			pthread_mutex_unlock(&Gmutex);
 		}
 	}	
 	else if (!infop->redund.connect[1] && !infop->redund.close[1] && !infop->redund.thread[1]) {
+		pthread_mutex_unlock(&Gmutex);
 create_again2:
 		ret = pthread_create(&infop->redund.thread_id[1], NULL, (void *)redund_reconnect, (void *)infop);
 		pthread_detach(infop->redund.thread_id[1]);
@@ -2249,13 +2344,15 @@ create_again2:
 			printf("[AP] Create Thread[1] fail(%s)\n", strerror(errno));
 #endif
 			goto create_again2;
-		} else 
+		} else {
+			pthread_mutex_lock(&Gmutex);
 			infop->redund.thread[1] = 1;
-			Gport_cnt++;
-			if (Gport_cnt == 1)
-				printf("[NPORT]Net-two has disonnected\n");
+			pthread_mutex_unlock(&Gmutex);
+		}
 	}
+	pthread_mutex_unlock(&Gmutex);
 }
+#endif
 
 int connect_nonb(int client_fd, struct sockaddr_in *server_addr, socklen_t slen, int nsec)
 {
@@ -2264,6 +2361,9 @@ int connect_nonb(int client_fd, struct sockaddr_in *server_addr, socklen_t slen,
     socklen_t len;
     fd_set rset, wset;
     struct timeval tval;
+
+    if (client_fd < 0)
+	return -1;
 
     flags = fcntl(client_fd, F_GETFL, 0);
     fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);

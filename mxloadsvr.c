@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <linux/version.h>
+#include <stdio.h>
 
 #define VERSION_CODE(ver,rel,seq)	((ver << 16) | (rel << 8) | seq)
 
@@ -146,7 +147,7 @@ int modify_script(char *tmpfile, char *modfile, char *addstr)
 
     for (;;)
     {
-        if (getline (&filestr, &len, f) < 0)
+        if (getline (&filestr, (size_t*)&len, f) < 0)
             break;
         fputs(filestr, tf);
         if (strstr(filestr, "#") != NULL)
@@ -159,7 +160,7 @@ int modify_script(char *tmpfile, char *modfile, char *addstr)
 
     for (;;)
     {
-        if (getline (&filestr, &len, f) < 0)
+        if (getline (&filestr, (size_t*)&len, f) < 0)
             break;
         fputs(filestr, tf);
         if (feof(f) == 0)
@@ -262,7 +263,7 @@ int main(int arg, char *argv[])
     /* get ttymajor & calloutmajor */
     for (;;)
     {
-        if (getline (&tmpstr, &len, f) < 0)
+        if (getline (&tmpstr, (size_t*)&len, f) < 0)
         {
             break;
         }
@@ -296,13 +297,11 @@ int main(int arg, char *argv[])
     sprintf(tmpstr, "%s awk '$0 !~ /grep/ {system(\"kill -15 \"$2)}'", tmpstr);
     system(tmpstr);
 
-
     DBG_PRINT("kill -15 npreal2d\n");
 
 
     if (makenode == LOADMODULE)
     {
-
         /* rm and mknod for all device node */
         memset(tmpstr, '\0', 1024);
         sprintf(tmpstr, "ps -ef | grep npreal2d |");
@@ -367,11 +366,12 @@ int main(int arg, char *argv[])
         system("grep -v '### END INIT INFO' /tmp/nprtmp7 > /tmp/nprtmp8 2>&1");
         system("cp -f /tmp/nprtmp8 /etc/init.d/npreals > /dev/null 2>&1");
         system("echo '### BEGIN INIT INFO' >> /etc/init.d/npreals");
-        system("echo '# Provides: MOXA' >> /etc/init.d/npreals");
-        system("echo '# Required-Start:' >> /etc/init.d/npreals");
-        system("echo '# Required-Stop:' >> /etc/init.d/npreals");
-        system("echo '# Default-Start:' >> /etc/init.d/npreals");
-        system("echo '# Default-Stop:' >> /etc/init.d/npreals");
+        system("echo '# Provides:       npreals' >> /etc/init.d/npreals");
+        system("echo '# Required-Start: $remote_fs $syslog' >> /etc/init.d/npreals");
+        system("echo '# Required-Stop:  $remote_fs $syslog' >> /etc/init.d/npreals");
+        system("echo '# Default-Start:  2 3 4 5' >> /etc/init.d/npreals");
+        system("echo '# Default-Stop:   0 1 6' >> /etc/init.d/npreals");
+        system("echo '# Description:    Enable Real TTY service provided by Moxa Inc.' >> /etc/init.d/npreals");
         system("echo '### END INIT INFO' >> /etc/init.d/npreals");
 
         system("rm -f /tmp/nprtmp2 /tmp/nprtmp3 /tmp/nprtmp4 /tmp/nprtmp5 /tmp/nprtmp6 /tmp/nprtmp7 /tmp/nprtmp8");
@@ -415,12 +415,12 @@ int main(int arg, char *argv[])
 
 //  }
 
-
     /* check if daemon is running or not */
     memset(tmpstr, '\0', 1024);
     sprintf(tmpstr, "ps -ef | grep npreal2d | grep -v grep");
     sprintf(tmpstr, "%s > /tmp/nprtmp_checkdaemon", tmpstr);
     system(tmpstr);
+
 //return 0;  //joy ok
     f = fopen ("/tmp/nprtmp_checkdaemon", "r");
     if (f == NULL)
@@ -647,12 +647,7 @@ int main(int arg, char *argv[])
 	}
 #endif
 
-
-
-
-
-
-    system("rm -f /tmp/nprtmp_checkdaemon");
+    system("rm -f /tmp/nprtmp_checkdaemon ");
     //system("rm -f /tmp/nprtmp_checkcf");
     system("rm -f /tmp/nprtmp_chkstr");
 

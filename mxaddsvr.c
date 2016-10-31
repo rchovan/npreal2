@@ -5,8 +5,7 @@
 #include <stdlib.h>
 #include <termios.h>
 #include <linux/version.h>
-
-#define VERSION_CODE(ver,rel,seq)	((ver << 16) | (rel << 8) | seq)
+#include <stdio.h>
 
 #define     ER_ARG      -10
 #define		REALCOM_MODE 0
@@ -559,7 +558,7 @@ int main(int arg, char *argv[])
     {
 		//printf("tmp_i = %d\n", tmp_i);
         /* end of file */
-        if (getline (&tmpstr, &len, f) < 0)
+        if (getline (&tmpstr, (size_t*)&len, f) < 0)
         {
 			//printf("getline = %d\n", tmp_i);
             break;

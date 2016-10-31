@@ -6,3 +6,4 @@
 ttymajor=33
 calloutmajor=38
 #[Minor] [ServerIP]	[data]	[cmd]	[FIFO]	[SSL]	[ttyName] [coutName] [interface][mode][BackIP]
+

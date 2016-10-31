@@ -8,7 +8,7 @@
  *
  */
 
-#define     NPREAL_VERSION          "1.18.31 Build 14052916"
+#include	"np_ver.h"
 
 #include	<sys/types.h>
 #include	<sys/socket.h>
@@ -219,7 +219,7 @@ char *	argv[];
         signal(SIGCLD, SIG_IGN);
 
         Restart_daemon = 0;
-        sprintf(ver, "MOXA Real TTY daemon program starting (Ver%s)...", NPREAL_VERSION);
+        sprintf(ver, "MOXA Real TTY daemon program starting (%s %s)...", NPREAL_VERSION, NPREAL_BUILD);
         log_event(ver);
 #ifndef	STREAM
         signal (SIGTERM, ( (void (*)())restart_handle) );
@@ -746,6 +746,7 @@ char *	msg;
     time_t		t;
     struct tm	*tt;
     char		tmp[80];
+    unsigned long sz;
 
     if (Restart_daemon)
         return;
@@ -764,7 +765,14 @@ char *	msg;
         fputs(tmp, fd);
         fputs(msg, fd);
         fputs("\n", fd);
+        sz = ftell(fd);
         fclose(fd);
+
+        if(sz > (1024*1024*1024)){
+        	sprintf(tmp, "mv --backup=numbered -b %s %s.old", EventLog, EventLog);
+        	system(tmp);
+        }
+
     }
 }
 

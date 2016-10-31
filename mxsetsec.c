@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define     ER_ARG  -10
 
@@ -203,7 +204,7 @@ int main(int arg, char *argv[])
     /* print the list of installed server */
     for (;;)
     {
-        if (getline (&tmpstr, &len, f) < 0)
+        if (getline (&tmpstr, (size_t*)&len, f) < 0)
         {
             break;
         }
@@ -295,7 +296,7 @@ int main(int arg, char *argv[])
 
     for (;;)
     {
-        if (getline (&tmpstr, &len, f) < 0)
+        if (getline (&tmpstr, (size_t*)&len, f) < 0)
         {
             break;
         }

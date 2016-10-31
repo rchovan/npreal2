@@ -148,6 +148,7 @@ typedef struct _TTYINFO
 	char	ttyname2[160];
 	char	curname[160];
 	int	alive_check_cnt;
+	int	stop_tx;
 }
 TTYINFO;
 
