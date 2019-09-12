@@ -9,6 +9,7 @@
 #define LOADMODULE      3
 #define LOADNODE        2
 
+#define TMP_STR_LEN		1024
 
 unsigned long filelength(int f)
 {
@@ -19,13 +20,14 @@ unsigned long filelength(int f)
 
 int version_upgrade_check()
 {
-    char tmpstr[1024], tmpstr2[1024], token[256], *chk;
+#define TOKEN_LEN 256
+    char tmpstr[TMP_STR_LEN], tmpstr2[TMP_STR_LEN], token[TOKEN_LEN], *chk;
     char delim[] = " \t";
     FILE *f, *ft;
-    size_t i, len;
+    int i, len;
 
-    /* check if npreal2d.cf is empty or not */
-    memset(tmpstr, '\0', 1024);
+    /* check if existing npreal2d.cf is empty or not (There is only config in DRIVERPATH when the 1st time installation) */
+    memset(tmpstr, '\0', TMP_STR_LEN);
     sprintf(tmpstr, "grep -v \"#\" %s/npreal2d.cf |", DRIVERPATH);
     sprintf(tmpstr, "%s grep -v \"ttymajor\" |", tmpstr);
     sprintf(tmpstr, "%s grep -v \"calloutmajor\" > /tmp/nprtmp_checkcf", tmpstr);
@@ -40,11 +42,11 @@ int version_upgrade_check()
 
     if (filelength(fileno(f)))
     {
-        memset(tmpstr, '\0', 1024);
+        memset(tmpstr, '\0', TMP_STR_LEN);
         sprintf(tmpstr, "cp -f %s/config %s/npreal2d.cf", DRIVERPATH, DRIVERPATH);
         system(tmpstr);
 
-        memset(tmpstr, '\0', 1024);
+        memset(tmpstr, '\0', TMP_STR_LEN);
         sprintf(tmpstr, "%s/npreal2d.cf", DRIVERPATH);
         ft = fopen (tmpstr, "a+");
         if (ft == NULL)
@@ -55,10 +57,10 @@ int version_upgrade_check()
         }
         for (;;)
         {
-            memset(tmpstr, '\0', 1024);
-            memset(tmpstr2, '\0', 1024);
-            memset(token, '\0', 256);
-            if (fgets(tmpstr, 1024, f) == NULL)
+            memset(tmpstr, '\0', TMP_STR_LEN);
+            memset(tmpstr2, '\0', TMP_STR_LEN);
+            memset(token, '\0', TOKEN_LEN);
+            if (fgets(tmpstr, TMP_STR_LEN, f) == NULL)
             {
                 break;
             }
@@ -77,6 +79,8 @@ int version_upgrade_check()
                     }
                 }
             }
+            // Check whether the count of parameters of configuration is more than 6.
+            // That is the newer version of configuration is found. Just save them.
             if (i >= 7)
             {
                 fputs (tmpstr2, ft);
@@ -93,7 +97,7 @@ int version_upgrade_check()
                     }
                     else
                     {
-                        DBG_PRINT("i=%zu\n", i);
+                        DBG_PRINT("i=%d\n", i);
                         chk = strtok(NULL, delim);
                         if (i == 2 && chk != NULL)
                         {
@@ -122,11 +126,13 @@ int version_upgrade_check()
     return 0;
 }
 
+// Create new [modifle] file, copy [tmpfile] to modifle, and insert [addstr] after the continuous '#'.
+// Return: 1:success 0:NG
 int modify_script(char *tmpfile, char *modfile, char *addstr)
 {
     char *filestr;
     FILE *f, *fos, *tf;
-    size_t len=1024;
+    int len=1024;
 
     filestr = (char *)malloc(1024);
 
@@ -177,12 +183,13 @@ int modify_script(char *tmpfile, char *modfile, char *addstr)
 
 int main(int arg, char *argv[])
 {
-    size_t i, chk, len, makenode;
+    int i, chk, len, makenode;
     int ttymajor, calloutmajor;
     int daemon_flag, cf_flag;
     char *tmpstr, *os;
     char major[20];
     FILE *f, *fos, *tf;
+	int is_initd_exist;
 
     if (arg > 2)
     {
@@ -191,7 +198,7 @@ int main(int arg, char *argv[])
     }
     else if (arg == 2)
     {
-        if (!strcmp(argv[1], "module") && !strcmp(argv[1], "install"))
+        if (strcmp(argv[1], "module") && strcmp(argv[1], "install"))
         {
             printf("\nWarning: unrecognized option -> \"%s\"\n\n", argv[1]);
         }
@@ -202,7 +209,11 @@ int main(int arg, char *argv[])
     if (fos != NULL)
     {
         fclose(fos);
+#if (LINUX_VERSION_CODE < VERSION_CODE(3,10,0))
         os = "linux";
+#else
+		os = "linux_rh";
+#endif
     }
     else
     {
@@ -246,12 +257,12 @@ int main(int arg, char *argv[])
         }
     }
 
-    tmpstr = (char *)malloc(1024);
-    len = 1024;
-    memset(tmpstr, '\0', 1024);
+    tmpstr = (char *)malloc(TMP_STR_LEN);
+    memset(tmpstr, '\0', TMP_STR_LEN);
     daemon_flag = 0;
     cf_flag = 0;
     sprintf(tmpstr, "%s/npreal2d.cf", DRIVERPATH);
+
     f = fopen (tmpstr, "r");
     if (f == NULL)
     {
@@ -289,10 +300,8 @@ int main(int arg, char *argv[])
     }
     fclose(f);
 
-//	return 0;  //joy ok
-
     /* stop daemon (npreal2d) */
-    memset(tmpstr, '\0', 1024);
+    memset(tmpstr, '\0', TMP_STR_LEN);
     sprintf(tmpstr, "ps -ef | grep npreal2d |");
     sprintf(tmpstr, "%s awk '$0 !~ /grep/ {system(\"kill -15 \"$2)}'", tmpstr);
     system(tmpstr);
@@ -303,7 +312,7 @@ int main(int arg, char *argv[])
     if (makenode == LOADMODULE)
     {
         /* rm and mknod for all device node */
-        memset(tmpstr, '\0', 1024);
+        memset(tmpstr, '\0', TMP_STR_LEN);
         sprintf(tmpstr, "ps -ef | grep npreal2d |");
         sprintf(tmpstr, "%s awk '$0 !~ /grep/ {system(\"kill -9 \"$2)}'", tmpstr);
         system(tmpstr);
@@ -318,9 +327,9 @@ int main(int arg, char *argv[])
         system(tmpstr);
     }
 
-//  if (makenode >= LOADNODE) {
+    //  if (makenode >= LOADNODE) {
     /* delete all device file configured in npreal2d.cf */
-    memset(tmpstr, '\0', 1024);
+    memset(tmpstr, '\0', TMP_STR_LEN);
     sprintf(tmpstr, "awk '$0 !~ /#/' %s/npreal2d.cf |", DRIVERPATH);
     sprintf(tmpstr, "%s awk '$6 != \"\" ' |", tmpstr);
     sprintf(tmpstr, "%s awk '$7 != \"\" ' |", tmpstr);
@@ -328,12 +337,20 @@ int main(int arg, char *argv[])
     system(tmpstr);
 
     /* create all device file configured in npreal2d.cf */
-    memset(tmpstr, '\0', 1024);
+    memset(tmpstr, '\0', TMP_STR_LEN);
     sprintf(tmpstr, "awk '$0 !~ /#/' %s/npreal2d.cf |", DRIVERPATH);
     sprintf(tmpstr, "%s awk '$7 != \"\" ' |", tmpstr);
     sprintf(tmpstr, "%s awk '$8 != \"\" ' |", tmpstr);
     sprintf(tmpstr, "%s awk '{system(\"%s/mxmknod \" $7 \" %d \" $1); system(\"%s/mxmknod \" $8 \" %d \" $1)}'", tmpstr, DRIVERPATH, ttymajor, DRIVERPATH, calloutmajor);
     system(tmpstr);
+
+	f = fopen( "/etc/init.d/npreals", "r+");
+	if( f != NULL ){
+		is_initd_exist = 1;
+		fclose(f);
+	}else{
+		is_initd_exist = 0;
+	}
 
     /* modify script file                         */
     /* remove string with "modprobe npreal2" and then           */
@@ -343,15 +360,23 @@ int main(int arg, char *argv[])
     {
         system("grep -v 'modprobe npreal2' /etc/rc.d/rc.local > /tmp/nprtmp_rclocal 2>&1");
         sprintf(tmpstr, "modprobe npreal2 ttymajor=%d calloutmajor=%d verbose=0\n", ttymajor, calloutmajor);
-        if (modify_script("/tmp/nprtmp_rclocal", "/etc/rc.d/rc.local", tmpstr) != 1)
+        if (modify_script("/tmp/nprtmp_rclocal", "/etc/rc.d/rc.local", tmpstr) != 1){
             return 0;
+        }
         system("rm -f /tmp/nprtmp_rclocal > /dev/null 2>&1");
         system("chmod +x /etc/rc.d/rc.local");
-
     }
-    else if (os == "debian")
-    {
-        system("grep -v 'modprobe npreal2' /etc/init.d/npreals > /tmp/nprtmp_rclocal 2>&1");
+	else if (os == "linux_rh")
+	{
+		if (is_initd_exist){
+			//system("grep -v '#!/bin/sh' /etc/init.d/npreals > /tmp/nprtmp_rclocal1 2>&1");
+        	//system("grep -v 'modprobe npreal2' /tmp/nprtmp_rclocal1 > /tmp/nprtmp_rclocal 2>&1");
+        	system("grep -v 'modprobe npreal2' /etc/init.d/npreals > /tmp/nprtmp_rclocal 2>&1");
+			//system("rm -f /tmp/nprtmp_rclocal1 > /dev/null 2>&1");
+		} else{ 
+			system("echo '#!/bin/sh' > /tmp/nprtmp_rclocal 2>&1");
+		}
+
         sprintf(tmpstr, "modprobe npreal2 ttymajor=%d calloutmajor=%d verbose=0\n", ttymajor, calloutmajor);
         if (modify_script("/tmp/nprtmp_rclocal", "/etc/init.d/npreals", tmpstr) != 1)
             return 0;
@@ -367,8 +392,8 @@ int main(int arg, char *argv[])
         system("cp -f /tmp/nprtmp8 /etc/init.d/npreals > /dev/null 2>&1");
         system("echo '### BEGIN INIT INFO' >> /etc/init.d/npreals");
         system("echo '# Provides:       npreals' >> /etc/init.d/npreals");
-        system("echo '# Required-Start: $remote_fs $syslog' >> /etc/init.d/npreals");
-        system("echo '# Required-Stop:  $remote_fs $syslog' >> /etc/init.d/npreals");
+        system("echo '# Required-Start: $remote_fs $syslog $named' >> /etc/init.d/npreals");
+        system("echo '# Required-Stop:  $remote_fs $syslog $named' >> /etc/init.d/npreals");
         system("echo '# Default-Start:  2 3 4 5' >> /etc/init.d/npreals");
         system("echo '# Default-Stop:   0 1 6' >> /etc/init.d/npreals");
         system("echo '# Description:    Enable Real TTY service provided by Moxa Inc.' >> /etc/init.d/npreals");
@@ -377,8 +402,56 @@ int main(int arg, char *argv[])
         system("rm -f /tmp/nprtmp2 /tmp/nprtmp3 /tmp/nprtmp4 /tmp/nprtmp5 /tmp/nprtmp6 /tmp/nprtmp7 /tmp/nprtmp8");
 
         system("chmod +x /etc/init.d/npreals");
-        system("update-rc.d npreals defaults 90");
+        system("chkconfig --add /etc/init.d/npreals");
+	}
+    else if (os == "debian")
+    {
+		// Generate fresh '#!/bin/sh'
+		if(is_initd_exist){
+			system("grep -v 'modprobe npreal2' /etc/init.d/npreals > /tmp/nprtmp1 2>&1");
+	        system("grep -v '#!/bin/sh' /tmp/nprtmp1 > /tmp/nprtmp2 2>&1");
 
+	        system("echo '#!/bin/sh' > /etc/init.d/npreals 2>&1");
+	        sprintf(tmpstr, "echo 'modprobe npreal2 ttymajor=%d calloutmajor=%d verbose=0' >> /etc/init.d/npreals 2>&1", ttymajor, calloutmajor);
+
+	        system(tmpstr);
+
+	        system("cat /tmp/nprtmp2 >> /etc/init.d/npreals 2>&1");
+
+	        system("rm -f /tmp/nprtmp1 2>&1");
+	        system("rm -f /tmp/nprtmp2 2>&1");
+            system("chmod +x /etc/init.d/npreals");
+		} else{
+			system("echo '#!/bin/sh' > /etc/init.d/npreals 2>&1");
+			sprintf(tmpstr, "echo 'modprobe npreal2 ttymajor=%d calloutmajor=%d verbose=0' >> /etc/init.d/npreals 2>&1", ttymajor, calloutmajor);
+			system(tmpstr);
+			system("chmod +x /etc/init.d/npreals");
+		}
+
+	    system("grep -v '### BEGIN INIT INFO' /etc/init.d/npreals > /tmp/nprtmp1 2>&1");
+	    system("grep -v '# Provides:' /tmp/nprtmp1 > /tmp/nprtmp2 2>&1");
+	    system("grep -v '# Required-Start:' /tmp/nprtmp2 > /tmp/nprtmp3 2>&1");
+        system("grep -v '# Required-Stop:' /tmp/nprtmp3 > /tmp/nprtmp4 2>&1");
+        system("grep -v '# Default-Start:' /tmp/nprtmp4 > /tmp/nprtmp5 2>&1");
+        system("grep -v '# Default-Stop:' /tmp/nprtmp5 > /tmp/nprtmp6 2>&1");
+        system("grep -v '# Description:' /tmp/nprtmp6 > /tmp/nprtmp7 2>&1");
+        system("grep -v '### END INIT INFO' /tmp/nprtmp7 > /tmp/nprtmp8 2>&1");
+
+        system("cp -f /tmp/nprtmp8 /etc/init.d/npreals > /dev/null 2>&1");
+        system("echo '### BEGIN INIT INFO' >> /etc/init.d/npreals");
+        system("echo '# Provides:       npreals' >> /etc/init.d/npreals");
+        system("echo '# Required-Start: $remote_fs $syslog $named' >> /etc/init.d/npreals");
+        system("echo '# Required-Stop:  $remote_fs $syslog $named' >> /etc/init.d/npreals");
+        system("echo '# Default-Start:  2 3 4 5' >> /etc/init.d/npreals");
+        system("echo '# Default-Stop:   0 1 6' >> /etc/init.d/npreals");
+        system("echo '# Description:    Enable Real TTY service provided by Moxa Inc.' >> /etc/init.d/npreals");
+        system("echo '### END INIT INFO' >> /etc/init.d/npreals");
+
+        system("rm -f /tmp/nprtmp1 /tmp/nprtmp2 /tmp/nprtmp3 /tmp/nprtmp4 /tmp/nprtmp5 /tmp/nprtmp6 /tmp/nprtmp7 /tmp/nprtmp8");
+
+        system("chmod +x /etc/init.d/npreals");
+        system("update-rc.d npreals defaults 90");
+        //printf("MXLOAD: @ %d, %s\n", __LINE__, __FUNCTION__);
     }
     else if (os == "SuSE")
     {
@@ -416,12 +489,11 @@ int main(int arg, char *argv[])
 //  }
 
     /* check if daemon is running or not */
-    memset(tmpstr, '\0', 1024);
+    memset(tmpstr, '\0', TMP_STR_LEN);
     sprintf(tmpstr, "ps -ef | grep npreal2d | grep -v grep");
     sprintf(tmpstr, "%s > /tmp/nprtmp_checkdaemon", tmpstr);
     system(tmpstr);
 
-//return 0;  //joy ok
     f = fopen ("/tmp/nprtmp_checkdaemon", "r");
     if (f == NULL)
     {
@@ -431,7 +503,7 @@ int main(int arg, char *argv[])
     }
     if (filelength(fileno(f)) != 0)
     {
-        daemon_flag = 1;
+        daemon_flag = 1; /* Means any npreal2d is running now. */
     }
     else
     {
@@ -443,13 +515,13 @@ int main(int arg, char *argv[])
     sprintf(tmpstr, "%s/mxcfmat", DRIVERPATH);
     system(tmpstr);
 
-    memset(tmpstr, '\0', 1024);
+    memset(tmpstr, '\0', TMP_STR_LEN);
     sprintf(tmpstr, "grep -v \"#\" %s/npreal2d.cf |", DRIVERPATH);
     sprintf(tmpstr, "%s grep -v \"ttymajor\" |", tmpstr);
     sprintf(tmpstr, "%s grep -v \"calloutmajor\" > /tmp/nprtmp_checkcf", tmpstr);
     system(tmpstr);
 
-    memset(tmpstr, '\0', 1024);
+    memset(tmpstr, '\0', TMP_STR_LEN);
     sprintf(tmpstr, "/tmp/nprtmp_checkcf");
     f = fopen (tmpstr, "r");
     if (f == NULL)
@@ -460,20 +532,23 @@ int main(int arg, char *argv[])
     }
     if (filelength(fileno(f)) != 0)
     {
-        cf_flag = 1;
+        cf_flag = 1; /* Means configurations are exist */
     }
     else
     {
         cf_flag = 0;
     }
     fclose(f);
-	//return 0; // joy fail
-    memset(tmpstr, '\0', 1024);
+
+    memset(tmpstr, '\0', TMP_STR_LEN);
     if (daemon_flag == 1)
     {
+    	// If there is npreal2d daemon running...
+
         if (cf_flag == 1)
         {
-            memset(tmpstr, '\0', 1024);
+        	// If there is npreal2d.cf configurations...
+            memset(tmpstr, '\0', TMP_STR_LEN);
             sprintf(tmpstr, "ps -ef | grep npreal2d |");
             sprintf(tmpstr, "%s awk '$0 !~ /grep/ {system(\"kill -15 \"$2)}'", tmpstr);
             system(tmpstr);
@@ -482,8 +557,9 @@ int main(int arg, char *argv[])
         }
         else
         {
-            memset(tmpstr, '\0', 1024);
+            memset(tmpstr, '\0', TMP_STR_LEN);
             sprintf(tmpstr, "ps -ef | grep npreal2d |");
+
             sprintf(tmpstr, "%s awk '$0 !~ /grep/ {system(\"kill -9 \"$2)}'", tmpstr);
             system(tmpstr);
             DBG_PRINT("daemon=1, cf=0, kill -9 npreal2d\n");
@@ -493,9 +569,7 @@ int main(int arg, char *argv[])
     {
         if (cf_flag == 1)
         {
-            //sprintf(tmpstr, "%s/npreal2d -t 1 > joy_log", DRIVERPATH);
             sprintf(tmpstr, "%s/npreal2d_redund -t 1", DRIVERPATH);
-            //sprintf(tmpstr, "%s/npreal2d_redund -t 1>joy_log", DRIVERPATH);
             system(tmpstr);
             sprintf(tmpstr, "%s/npreal2d -t 1", DRIVERPATH);
             system(tmpstr);
@@ -508,9 +582,10 @@ int main(int arg, char *argv[])
         }
     }
 
-    memset(tmpstr, '\0', 1024);
+    memset(tmpstr, '\0', TMP_STR_LEN);
     if (cf_flag == 0)
     {
+    	// If there is no configuration, remove mxloadsvr in rc.local
         if (os == "linux")
         {
             system("grep -v mxloadsvr /etc/rc.d/rc.local > /tmp/nprtmp_rclocal");
@@ -519,6 +594,16 @@ int main(int arg, char *argv[])
             system("chmod +x /etc/rc.d/rc.local");
 
         }
+		else if (os == "linux_rh")
+		{
+            system("grep -v mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_rclocal");
+            system("cp -f /tmp/nprtmp_rclocal /etc/init.d/npreals > /dev/null 2>&1");
+            system("rm -f /tmp/nprtmp_rclocal");
+            system("chmod +x /etc/init.d/npreals");
+        	//system("chkconfig --add /etc/init.d/npreals");
+        	system("chkconfig --del /etc/init.d/npreals > /dev/null 2>&1");
+
+		}
         else if (os == "debian")
         {
             system("grep -v mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_rclocal");
@@ -544,6 +629,7 @@ int main(int arg, char *argv[])
     }
     else if (cf_flag == 1)
     {
+    	// If there is no mxloadsvr in rc.local, add it...
         if (os == "linux")
         {
             system("grep mxloadsvr /etc/rc.d/rc.local > /tmp/nprtmp_chkstr");
@@ -564,6 +650,27 @@ int main(int arg, char *argv[])
             fclose(f);
 
         }
+		else if (os == "linux_rh")
+		{
+            system("grep mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_chkstr");
+            sprintf(tmpstr, "/tmp/nprtmp_chkstr");
+            f = fopen (tmpstr, "r");
+            if (f == NULL)
+            {
+                DBG_PRINT("file open error(str)\n");
+                free(tmpstr);
+                return(0);
+            }
+            if (filelength(fileno(f)) == 0)
+            {
+                sprintf(tmpstr, "echo '%s/mxloadsvr' >> /etc/init.d/npreals", DRIVERPATH);
+                system(tmpstr);
+                system("chmod +x /etc/init.d/npreals");
+            }
+            fclose(f);
+        	system("chkconfig --add /etc/init.d/npreals > /dev/null 2>&1");
+
+		}
         else if (os == "debian")
         {
             system("grep mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_chkstr");
@@ -579,10 +686,6 @@ int main(int arg, char *argv[])
             {
                 sprintf(tmpstr, "echo '%s/mxloadsvr' >> /etc/init.d/npreals", DRIVERPATH);
                 system(tmpstr);
-#if (LINUX_VERSION_CODE == VERSION_CODE(3,2,48))
-                sprintf(tmpstr, "echo '%s/mxloadsvr' >> /etc/init.d/npreals", DRIVERPATH);
-                system(tmpstr);
-#endif
                 system("chmod +x /etc/init.d/npreals");
             }
             fclose(f);
@@ -628,11 +731,11 @@ int main(int arg, char *argv[])
         }
     }
 
-
+    // TODO: There is a bug that excess tty port have been created when user map more than 10 ports.
 #if (LINUX_VERSION_CODE == VERSION_CODE(3,2,48))
     /* Remap the device node name (Linux ubuntu 3.8.0-29-generic/ disc: ubuntu-12.04.4-desktop-i386  */
     if (os == "debian") {
-	    memset(tmpstr, '\0', 1024);
+	    memset(tmpstr, '\0', TMPSTR_LEN);
 	    sprintf(tmpstr, "mkdir %s/ttys", DRIVERPATH);
 	    system(tmpstr);
 
@@ -653,5 +756,6 @@ int main(int arg, char *argv[])
 
     printf("Complete.\n\n");
     free(tmpstr);
+
     return 0;
 }

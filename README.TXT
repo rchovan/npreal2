@@ -3,8 +3,8 @@
 
                               README file
 
-  Date: 09-10-2013
-  Copyright (C) 2004-2012, MOXA Inc. All rights reserved.
+  Date: 11-02-2017
+  Copyright (C) 2004-2017, MOXA Inc. All rights reserved.
 ========================================================================
 Content
 
@@ -15,7 +15,7 @@ Content
 5. Hardware Installation
 6. Installing the Driver File
 7. Mapping TTY Ports
-8. Setting Security Parameter
+8. Settings for Secure Real COM Mode
 9. Remove Mapped TTY Ports
 10. TTY Naming Rule
 11. Removing the Driver
@@ -32,15 +32,23 @@ Content
 
 2. OS Supports
     This driver can run under following systems.
-    a. Linux (kernel 2.4.x) (Support IPv4 only)
-    b. Linux (kernel 2.6.x) (Support IPv4 and IPv6)
-	c. Linux (kernel 3.x.x) (Support IPV4 and IPV6)
+    a. Primary Linux distribution (kernel 3.0 or later)
+       (Support IPV4 and IPV6)
+    
+    Following distributions are tested when releasing.
+    a. OpenSUSE Leap 42.3 x64 (4.4.76-1)
+    b. Fedora 26 x64 (4.11.8-300)
+    c. CentOS 7.4 x64 (3.10.0-693)
+    d. Ubuntu 17.04 x86 (4.10.0-19)
+    e. Debian 9.1.0x64 (4.9.0-3-amd64)
+    f. Raspbian Jessie on Pi 2 (4.4.50-v7+)
+    g. Raspbian Jessie on Pi 3 (4.1.19-v7+)    
 
 3. System Requirement
-    To install this driver, you will need NPort Server and one of
-    the following system.
+    To install this driver, you will need NPort Server and one of the
+    following system.
 
-     -  kernel 2.4.x or 2.6.x or above and the kernel source package
+     -  kernel 3.0 or above and the kernel source package
      -  gcc-2.7.2.1 or above
      -  ld.so-1.7.14 or above
      -  libc.so-5 or above
@@ -48,12 +56,18 @@ Content
      -  make-3.74 or above
      -  gunzip-1.2.4 or above
      -  gawk-3.1.1.9 or above
-     -  openssl-0.9.8a or above (For Secure Real COM Mode only)
+     -  openssl-1.0.0 or above (For Secure Real COM Mode only)
+     -  libssl-dev-1.0.0 or above (For Secure Real COM Mode only)
+     
+    Additional requirements for Raspbian
+     -  gcc-4.8.3 or above 
+     -  ncurses-devel-5.9 or above
+     -  rpi-source (https://github.com/notro/rpi-source/wiki)
 
 4. Procedure
     To map NPort serial port to host tty port, you need to:
     1. Setup NPort.
-      Make sure the IP configuration is ok and you can access
+      Make sure the IP configuration is correct and you can access
       the NPort (ping, telnet...) successfully and then configure 
       the NPort serial port to Real COM Mode. 
 
@@ -70,14 +84,15 @@ Content
     
     The default IP address for NPort Server is 192.168.127.254.
 
-    For NPort W2150/W2250/W2004, the default IP address of the Ethernet
+    For NPort Wireless series, the default IP address of the Ethernet
     interface is 192.168.126.254, and the default IP address of the
     Wireless LAN interface is 192.168.127.254.
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!
       After installing the hardware, you MUST configure the 
       NPort operating mode to Real COM Mode. If you want to  
-      communication with security, please enable secure.
+      communication with security, please enable secure mode
+      in both NPort and Real TTY configuration.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 6. Installing the Driver File
@@ -86,7 +101,7 @@ Content
     c. Execute "cd " to change to the home directory.
     d. Copy the driver file npreal2xx.tgz to the home directory.
     e. Execute "tar xvfz npreal2xx.tgz" to copy all files into the system.
-    f. Execute "./moxa/mxinst".
+    f. Execute "./moxa/mxinst" for Linux kernel 3.x or 4.x.
 	
     !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE 1!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	  For Red Hat AS/ES/WS and Fedora Core1, extra argument is 
@@ -159,8 +174,8 @@ Content
 
 	7.2 Redundant COM Mode
 	  Before mapping tty ports, you must set the operation mode of your 
-          NPORT to Redundant COM Mode and make sure your device is CN2600 
-          series. 
+      NPORT to Redundant COM Mode and make sure your device is CN2600 
+      series. 
 	  We provide a new command to map tty ports to be Redundant COM Mode.
 
     a. Mapping tty ports
@@ -175,21 +190,32 @@ Content
           equal to (950, 951, ..., 965), and command ports 
           equal to (966, 967, 968, ..., 981).
 
-8. Setting Security Parameter
-   This function is used to set secure mode enable/disable.
+8. Settings for Secure Real COM Mode
+   a. Check necessary library for Secure Real COM Mode
+     User should visit https://www.openssl.org or the official website
+     of your Linux distribution to install openssl library libssl.so.
+
+     A simple way to test if you have libssl.so, please type 'ldconfig -p'
+     command and the result should like below example.
+
+       # ldconfig -p | grep libssl.so
+            libssl.so (libc6) => /usr/lib/i386-linux-gnu/libssl.so
+
+   b. Enable or disable the secure mode
+     A script mxsetsec is used to set secure mode enable/disable.
 	
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   This function is support NPort 6000 series only.
-   If your model is not NPort 6000 series, you could ignore this chapter.
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     This function is support NPort 6000 series only.
+     If your model is not NPort 6000 series, you could ignore this chapter.
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	
-   The syntax of "mxsetsec" is:
+     The syntax of "mxsetsec" is:
     
-   mxsetsec
+     mxsetsec
     
-   Example:
-     # cd /usr/lib/npreal2/driver
-     # ./mxsetsec
+     Example:
+       # cd /usr/lib/npreal2/driver
+       # ./mxsetsec
 
 9. Remove Mapped TTY Ports
     As with the "8. Mapping TTY Ports" task, we provide two ways to remove
@@ -237,8 +263,12 @@ Content
      ...(etc.)
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	   Callout Device is obsolete in Linux 2.6. That is,
-	   you cannot open Callout Device on Linux 2.6.
+	   1. Callout Device is obsolete in Linux 2.6. That is, you 
+	      cannot open Callout Device on Linux 2.6.
+	   2. ttyr0 - ttyr9 or some tty names represented by decimal
+	      number are created for kernel compatibility reason. User
+	      must use tty port name combine with hexadecimal digits
+	      for correct operation.   
      !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!
  
 11. Removing the Driver
@@ -322,11 +352,17 @@ Content
        up next time, the system will perform the relevant actions
        which are described in the script.
 	   
-	   Caution: If the Debian system boots without nport driver loaded,
-	   please execute following command with root administration to resolve
-	   this problem:
+           Caution:
+             If the Debian system boots without nport driver loaded, please
+             execute following command with root administration to resolve this
+             problem:
 	   
 	       # update-rc.d npreals defaults
+
+             Starting with Debian 6.0, the insserv command is used instead as
+             below instruction.
+
+               # insserv /etc/init.d/npreals
 
      c. For SuSE
        The initializing script file in SuSE is "/etc/rc.d/boot.local".
@@ -390,6 +426,5 @@ Content
      the following ways with detail description of the symptom.
 
      Email: support@moxa.com.tw
-     Tel  : +886 2 89191230 ext.300
 
 -End-

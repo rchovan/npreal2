@@ -130,4 +130,6 @@ int send_cmd_port_ls(int fd);
 #define         REDUND_ERROR_TCP_CONN  0x0004
 #define         REDUND_ERROR_FORK      0x0008
 
+extern void redund_handle_ttys();
+
 #endif /* _REDUND_H */

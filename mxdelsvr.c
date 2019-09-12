@@ -7,6 +7,8 @@
 
 #define     ER_ARG  -10
 
+#define VERSION_CODE(ver,rel,seq)	((ver << 16) | (rel << 8) | seq)
+
 char svrList[256][50];
 int total[256];
 int idx;
@@ -22,20 +24,19 @@ int check_usage(int arg, char *argv[])
     return 0;
 }
 
-char* GetIP(unsigned long ip, char *ret)
+void GetIP(unsigned long ip, char *ret)
 {
     struct in_addr ad;
 
     ad.s_addr = ip;
     sprintf(ret, "%s", inet_ntoa(ad));
 
-    return;
 }
 
 int main(int arg, char *argv[])
 {
     int i, j;
-    size_t len, daemon;
+    int len, daemon;
     struct in_addr ad;
     char *tmpstr, *tmp, *os, c[5];
     char token[50], tty[20], cout[20], major[20], del[50];
@@ -88,9 +89,12 @@ int main(int arg, char *argv[])
                 continue;
             }
 
+            // scan only 2 parameters...
             sscanf(tmpstr, "%s%s", token, token);
+
             if (strcmp(token, del) == 0)
             {
+            	// If the ip token is same as argv[1] (=del[])...
                 idx = 1;
                 break;
             }
@@ -261,7 +265,11 @@ printf("  (q)\tExit\n");
     if (f != NULL)
     {
         fclose(f);
+#if (LINUX_VERSION_CODE < VERSION_CODE(3,10,0))
         os = "linux";
+#else
+		os = "linux_rh";
+#endif
     }
     else
     {
@@ -296,6 +304,14 @@ printf("  (q)\tExit\n");
             system("rm -f /tmp/nprtmp_rclocal");
 
         }
+        else if (os == "linux_rh")
+        {
+            system("grep -v mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_rclocal");
+            system("cp -f /tmp/nprtmp_rclocal /etc/init.d/npreals > /dev/null 2>&1");
+            system("rm -f /tmp/nprtmp_rclocal");
+        	system("chkconfig --del /etc/init.d/npreals > /dev/null 2>&1");
+
+        }
         else if (os == "debian")
         {
             system("grep -v mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_rclocal");
@@ -323,6 +339,10 @@ printf("  (q)\tExit\n");
     if (os == "linux")
     {
         system("chmod +x /etc/rc.d/rc.local");
+    }
+    else if (os == "linux_rh")
+    {
+        system("chmod +x /etc/init.d/npreals");
     }
     else if (os == "debian")
     {

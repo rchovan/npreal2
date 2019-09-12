@@ -26,7 +26,7 @@
 #define		NP5610_8        0x5618
 #define		NP5610_16       0x5613
 
-
+//#define _DEBUG_PRINT 1
 #ifdef _DEBUG_PRINT
 #define DBG_PRINT       printf
 #else

@@ -7,6 +7,8 @@
 
 #define     ER_ARG  -10
 
+#define VERSION_CODE(ver,rel,seq)	((ver << 16) | (rel << 8) | seq)
+
 typedef struct _CONINFO
 {
     int idx;
@@ -32,14 +34,13 @@ CONINFO	info[256];
 int SetSecure(int index);
 int SelectNPort();
 
-char* GetIP(unsigned long ip, char *ret)
+void GetIP(unsigned long ip, char *ret)
 {
     struct in_addr ad;
 
     ad.s_addr = ip;
     sprintf(ret, "%s", inet_ntoa(ad));
 
-    return;
 }
 
 int SetSecure(int index)
@@ -103,12 +104,12 @@ int SetSecure(int index)
         if ((c[0] == 'n') || (c[0] == 'N'))
         {
             if (page == 0 && tot>16)
-                page++;
+                page++; 
         }
         if ((c[0] == 'p') || (c[0] == 'P'))
         {
             if (page == 1 && tot>16)
-                page--;
+                page--; 
         }
         else if ((c[0] == 'a') || (c[0] == 'A'))
         {
@@ -169,7 +170,7 @@ int SelectNPort()
 int main(int arg, char *argv[])
 {
     int i, j;
-    size_t len, daemon, num, ret;
+    int len, daemon, num, ret;
     char *tmpstr, *tmp, *os;
     char token[40], tty[10], cout[10], major[20], del[16], sec[10], index[10];
     char data[10], cmd[10], fifo[10], scope[10];
@@ -343,7 +344,11 @@ int main(int arg, char *argv[])
     if (f != NULL)
     {
         fclose(f);
+#if (LINUX_VERSION_CODE < VERSION_CODE(3,10,0))
         os = "linux";
+#else
+		os = "linux_rh";
+#endif
     }
     else
     {
@@ -372,6 +377,14 @@ int main(int arg, char *argv[])
             system("rm -f /tmp/nprtmp_rclocal");
 
         }
+        else if (os == "linux_rh")
+        {
+            system("grep -v mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_rclocal");
+            system("cp -f /tmp/nprtmp_rclocal /etc/init.d/npreals > /dev/null 2>&1");
+            system("rm -f /tmp/nprtmp_rclocal");
+        	system("chkconfig --del /etc/init.d/npreals > /dev/null 2>&1");
+
+        }
         else if (os == "debian")
         {
             system("grep -v mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_rclocal");
@@ -398,6 +411,10 @@ int main(int arg, char *argv[])
     if (os == "linux")
     {
         system("chmod +x /etc/rc.d/rc.local");
+    }
+    else if (os == "linux_rh")
+    {
+        system("chmod +x /etc/init.d/npreals");
     }
     else if (os == "debian")
     {

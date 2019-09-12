@@ -94,6 +94,13 @@
 #define REDUNDANT_ACK 0x04
 #define ACK_BIT 8 
 
+#define MAX_DNS_NAME_LEN	255
+
+#define NP_RET_SUCCESS		(0)
+#define NP_RET_ERROR		(-1)
+
+#define IP6_ADDR_LEN		39
+
 struct net_node_setting
 {
     int32_t server_type;
@@ -149,6 +156,7 @@ typedef struct _TTYINFO
 	char	curname[160];
 	int	alive_check_cnt;
 	int	stop_tx;
+	int		lost_cnt;
 }
 TTYINFO;
 
@@ -289,5 +297,7 @@ union sock_addr
 #ifdef OFFLINE_POLLING
 #define POLLING_ALIVE_TIME	30
 #endif
+
+void log_event(char *msg);
 
 #endif /* _NPREAL2D_H */

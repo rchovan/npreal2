@@ -2,14 +2,6 @@
 #ifndef _NPREAL2_H
 #define _NPREAL2_H
 
-#define CLEAR_FUNC 	npreal2_module_exit
-#define CLEAR_FUNC_RET	static void __exit
-
-
-#define INIT_FUNC 	npreal2_module_init
-#define INIT_FUNC_RET	static int __init
-
-
 #define DRV_VAR		(npvar_sdriver)
 #define DRV_VAR_P(x)	npvar_sdriver->x
 
@@ -70,14 +62,14 @@ typedef unsigned char	UCHAR;
 #define MX_DEBUG_INFO       60		// 60~79 for INFO level
 #define MX_DEBUG_LOUD       80		// 80~ for LOUD level
 
+#define MX_DBG 1
 #ifdef MX_DBG
 extern int	MXDebugLevel;
 #define DBGPRINT(level, fmt, args...)			\
 {							\
     if ((level) <= MXDebugLevel)				\
     {							\
-	printk("Real TTY: %s %d> ", __FUNCTION__, __LINE__);	\
-	printk(KERN_DEBUG fmt, ## args);		\
+	printk(KERN_DEBUG "MX(%d,%s) " fmt, __LINE__, __FUNCTION__, ## args);		\
     }							\
 }
 #else

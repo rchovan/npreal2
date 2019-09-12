@@ -4,11 +4,13 @@
 #include <stdio.h>
 
 #define     ER_ARG  -10
-#define     ARGUMENT_NUM 11
+#define     ARGUMENT_NUM 11 
 
+// This program re-arrange the /usr/lib/npreal/driver/npreal2d.cf. Keep only comments and configurations.
+// It also separates parameters by tab control.
 int main(int arg, char *argv[])
 {
-    size_t i, j, len, flag;
+    int i, j, len, flag;
     char *tmpstr, *token, *minor_token, *chk;
     char delim[] = " \t";
     char major[20];

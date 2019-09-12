@@ -1,72 +1,49 @@
-
 Product:	NPort Linux Real TTY Driver (V2)
-Version:	1.18.33 Build 14060316
-Date:		06/03/2014
+Version:	1.19 Build 17110917
+Date:		11/09/2017
 Company:	Moxa Inc.
             
 Release Note:
 =============
-ver1.18.33 Build 14060316
-1. Bugifx: Every 20 seconds there is a loss of communication on the 
-	   Ethernet side to/from the NPort when user is used in IPv6.
-
-ver1.18.31 Build 14052916
-1. Bugfix: Textual modification.
-
-ver1.18.29 Build 14052013
-1. Improve: Support Linux kernel up to 3.13
-2. Bugfix: The port might cease to read data due to a flow control issue after
-           Linux kernel 3.8
-
-ver1.18.27 Build 14050810
-1. Bugfix: Driver will crash when connecting to a offline NPort if 
-           security mode is enabled.
-
-ver1.18.25 Build 14032010
-1. Bugfix: The port mapping be incorrect after reboot.
-
-ver1.18.23 Build 14031317
-1. Bugfix: If nport power off, the mechanism of reconnection will be triggered,
-	   but the current serial parameters was not set by the mechanism of 
-	   reconnection.
-
-ver1.18.21 Build 14030611
-1. Bugfix: when executing mxsetsec, the configuration of nport will be cleared.
-
-ver1.18.19 Build 14022618
-1. Bugfix: When opening node /dev/ttyr10, the port 16 should be opened, but
-	   the error port 10 is opened.
-
-ver1.18.17 Build 14010210
-1. Improve: Support Linux kernel up to 3.11.3
-
-ver1.18.15 Build 13092615
-1. Bugfix: The driver reference count becomes minus after port open fail.
-
-ver1.18.13 Build 13091016
-1. Improve: Update README.TXT for Debian 
-
-ver1.18.11 Build 13073017
-1. Bugfix: The RealTTY not compile correctly if kernel version contains
-           keywords "2.4" and it is not kernel 2.4.
-
-ver1.18.9 Build 13050816
-1. Bugfix: Fix driver compile error for kernel 3.8
-
-ver1.18.7 Build 13050317
-1. New: Remove call out ports, now add server no longer create call out ports.
-2. Improve: Support Linux kernel up tp 3.8.4.
-3. Bugfix: In background polling mode, the port other than port 1 works 
-           malfunctioned.
-
-ver1.18.5 Build 13042515
-1. New: Add NPort background polling feature.
-
-ver1.18.3 Build 13031515
-1. Improve: Modify permission of the /tmp folder that contain Real TTY driver. 
-
-ver1.18.1 Build 12051018
-1. Improve: Support Linux kernel up to 3.3.2.
+ver1.19 Build 17110917
+1. New: Support Raspbian Jessie or later for Raspberry Pi 2/3.
+2. New: Add driver background polling feature to eliminate the waiting time
+        when NPort is not existed in Slackware 14.0.
+3. Improve: Support kernel version to kernel 4.13.
+4. Improve: Compiling errors with error message “error: expected expression
+            before '{' token” in specified platforms.
+5. Improve: When using domain name as mapping address of NPort, it will be
+            translated every time while Real TTY opening the port.
+6. Improve: Compiling errors when using secured Real COM mode.
+7. Improve: Shutdown hanging might happen in specified OS Red Hat Enterprise
+            Linux 7.2 (3.10.0-123.el7).
+8. Bugfix: Real TTY can't startup TTY ports with domain name mapped after
+           system is rebooted.
+9. Bugfix: Kernel panic with error message "unable to handle kernel paging
+           request" on specified platforms.
+10. Bugfix: Driver isn't loaded properly after system reboot on Ubuntu 16.04.
+11. Bugfix: Driver may cause a kernel crash with error messages "soft lockup"
+            with specified network interface card.
+12. Bugfix: The command stty may output error if there is no loopback connector
+            on NPort in Redundant mode.
+13. Bugfix: Network reconnection problems when using redundant mode.
+14. Bugfix: The Real TTY service may not be started automatically in Debian 6.0
+            or later versions.
+15. Bugfix: There may be communication loss when using IPv6.
+16. Bugfix: It can't read data due to abnormal flow control in Linux kernel 3.8
+            and later.
+17. Bugfix: When security mode is enabled, driver may crash if it connects to
+            offline NPort.
+18. Bugfix: Port mapping incorrectly after reboot in Kernel 3.2.48.
+19. Bugfix: When NPort is offline, the current serial parameters are not saved
+            for reconnection.
+20. Bugfix: While executing mxsetsec, the configuration of driver will be
+            cleared.
+21. Bugfix: When opening node /dev/ttyr10, the port 16 should be opened, but
+            the port 10 is opened instead.
+22. Bugfix: The driver reference count becomes negative after port open fail.
+23. Change: Not support kernel 2.x. 
+24. Change: Log file increased unlimitedly causes file system crash.
 
 ver1.18 Build 12020919
 1. Improve: Support Linux Kernel up to 3.1.0-7

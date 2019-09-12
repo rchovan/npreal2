@@ -1,4 +1,6 @@
 PATH1="."
+BUILD_DATE:=$(shell date +%g%m%d%H)
+BUILD_VERSION:=1.19
 
 ##############################################################
 # Linux Kernel 3.0
@@ -12,17 +14,21 @@ ssl64: module SSL64npreal2d npreal2d_redund tools
 SP1_ssl64: module SSL64npreal2d npreal2d_redund tools
 ppc64: module ppc64npreal2d npreal2d_redund tools
 
-CC+=$(POLLING) 
+CC+=$(POLLING)
+
+lib: misc.c
+	$(CC) -Wall -c misc.c
+	$(AR) rcs misc.a misc.o 
 
 npreal2d: npreal2d.o
-	cc npreal2d.o -o npreal2d
+	$(CC) npreal2d.o -o npreal2d
 	strip	npreal2d
 
 npreal2d.o : npreal2d.c npreal2d.h
 	$(CC) -c npreal2d.c
 
 npreal2d_redund: 	redund_main.o redund.o
-	cc	redund_main.o redund.o -lpthread -o npreal2d_redund
+	$(CC)	redund_main.o redund.o -lpthread -o npreal2d_redund
 	strip	npreal2d_redund
 
 redund_main.o:	redund_main.c npreal2d.h redund.h
@@ -32,26 +38,28 @@ redund.o:	redund.c redund.h npreal2d.h
 	$(CC) -c redund.c
 
 SSLnpreal2d: 	SSLnpreal2d.o
-	cc	npreal2d.o -o npreal2d libssl.so 
+	cc	npreal2d.o -o npreal2d -lssl 
 	strip	npreal2d
 
 SSLnpreal2d.o:	npreal2d.c
 	$(CC) -c -DSSL_ON -DOPENSSL_NO_KRB5 npreal2d.c -I$(PATH1)/include
 	
 SSL64npreal2d: 	SSL64npreal2d.o
-	cc	-m64 npreal2d.o -o npreal2d libssl.so 
+	cc	-m64 npreal2d.o -o npreal2d -lssl 
 	strip	npreal2d
 
 SSL64npreal2d.o:	npreal2d.c
 	$(CC) -c -m64 -DSSL_ON -DOPENSSL_NO_KRB5 npreal2d.c -I$(PATH1)/include
 	
 ppc64npreal2d: 	ppc64npreal2d.o
-	cc	-mpowerpc64 npreal2d.o -o npreal2d libssl.so 
+	cc	-mpowerpc64 npreal2d.o -o npreal2d -lssl 
 	strip	npreal2d
 
 ppc64npreal2d.o:	npreal2d.c
 	$(CC) -c -mpowerpc64 -DSSL_ON -DOPENSSL_NO_KRB5 npreal2d.c -I$(PATH1)/include
-
+	
+misc.o : misc.c misc.h
+	$(CC) -c misc.c
 
 ifneq ($(KERNELRELEASE),)
 obj-m := npreal2.o
@@ -106,4 +114,11 @@ clean:
 	rm -f mxloadsvr
 	rm -f mxsetsec
 	rm -f Module.symvers
+	
+pack:
+	rm -rf ../../disk/moxa
+	mkdir ../../disk/moxa
+	cp * ../../disk/moxa
+	tar -C ../../disk -zcvf ../../disk/npreal2_mainline_v${BUILD_VERSION}_build_${BUILD_DATE}.tgz moxa
+	rm -rf ../../disk/moxa
 

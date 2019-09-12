@@ -45,6 +45,9 @@ then
     cp -f /tmp/nprtmp_rclocal3 /etc/rc.d/rc.local > /dev/null 2>&1
     rm -f /tmp/nprtmp_rclocal3 > /dev/null 2>&1
     chmod 755 /etc/rc.d/rc.local > /dev/null 2>&1
+
+	chkconfig --del /etc/init.d/npreals > /dev/null 2>&1
+
 elif [ "$OS" = "debian" ]
 then
     grep -v npreal2 /etc/init.d/npreals > /tmp/nprtmp_rclocal2 2>&1
