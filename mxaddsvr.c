@@ -15,6 +15,15 @@
 
 #define VERSION_CODE(ver,rel,seq)	((ver << 16) | (rel << 8) | seq)
 
+#define TMP_STR_LEN 256
+
+unsigned long filelength(int f)
+{
+    unsigned long sz = lseek(f,0,SEEK_END);
+    lseek(f,0,SEEK_SET);
+    return sz;
+}
+
 int minor[256];
 char *tmptty, *tmpcout;
 int idx;
@@ -279,6 +288,40 @@ int check_usage(int arg, char *argv[], int mode)
 	return ret;
 }
 
+//
+// Check system init process
+// return 0: systemd, 1: init
+//
+int isinitproc()
+{
+    int  ret;
+    char name[5];
+    FILE *f;
+
+    // check the init process is "init" or "systemd"
+    system("ps --no-headers -o comm 1 > /usr/lib/npreal2/tmp/chk_init_proc 2>&1");
+
+    f = fopen("/usr/lib/npreal2/tmp/chk_init_proc", "r");
+    if (f == NULL) {
+        printf("[1] file open error\n");
+        return 1;
+    }
+
+    fgets(name, 5, f);
+
+    fclose(f);
+
+    ret = strncmp("init", name, 4);
+    if (ret == 0) {
+        system("rm -f /usr/lib/npreal2/tmp/chk_init_proc > /dev/null 2>&1");
+        return 1;
+    }
+
+    system("rm -f /usr/lib/npreal2/tmp/chk_init_proc > /dev/null 2>&1");
+
+    return 0;
+}
+
 int main(int arg, char *argv[])
 {
 	const int ABORT_SETTING = -2;
@@ -298,6 +341,7 @@ int main(int arg, char *argv[])
 	FILE *f, *ft, *frc, *fos;
 	char *os = "linux";
 	int mode, tmp_i = 0, ret;
+    int is_init_proc;
 
 	mode = REALCOM_MODE;
 	overwrite = NORMAL_SETTING;
@@ -319,6 +363,8 @@ int main(int arg, char *argv[])
 	ret = check_usage(arg, argv, mode);
 	if (ret < 0)
 		return 0;
+
+    is_init_proc = isinitproc();
 
 	printf("\nAdding Server...\n\n");
 
@@ -378,7 +424,7 @@ int main(int arg, char *argv[])
 		break;
 	}
 
-	tmpstr = (char *)malloc(256);
+	tmpstr = (char *)malloc(TMP_STR_LEN);
 	len = 256;
 	tmp1 = (char *)malloc(40);
 	tmp2 = (char *)malloc(40);
@@ -393,10 +439,10 @@ int main(int arg, char *argv[])
 	if (fos != NULL)
 	{
 		fclose(fos);
-#if (LINUX_VERSION_CODE < VERSION_CODE(3,10,0))
-		os = "linux";
-#else
+#if (LINUX_VERSION_CODE == VERSION_CODE(3,10,0))
 		os = "linux_rh";
+#else
+		os = "linux";
 #endif
 	}
 	else
@@ -439,7 +485,7 @@ int main(int arg, char *argv[])
 		free(tmpcout);
 		return(0);
 	}
-	ft = fopen ("/tmp/npr_tmpfile2", "w");
+	ft = fopen ("/usr/lib/npreal2/tmp/npr_tmpfile2", "w");
 	if (ft == NULL)
 	{
 		printf("file open error_4\n");
@@ -602,9 +648,9 @@ int main(int arg, char *argv[])
 		return 0;
 	}
 
-	sprintf(tmpstr, "cp -f /tmp/npr_tmpfile2 %s/npreal2d.cf", DRIVERPATH);
+	sprintf(tmpstr, "cp -f /usr/lib/npreal2/tmp/npr_tmpfile2 %s/npreal2d.cf", DRIVERPATH);
 	system(tmpstr);
-	system("rm -f /tmp/npr_tmpfile2");
+	system("rm -f /usr/lib/npreal2/tmp/npr_tmpfile2");
 
 	sprintf(tmpstr, "%s/npreal2d.cf", DRIVERPATH);
 	f = fopen (tmpstr, "a+");
@@ -651,16 +697,62 @@ int main(int arg, char *argv[])
 		system(tmpstr);
 	}
 	fclose(f);
-	if (mode == REALCOM_MODE)
+
+	if (mode == REALCOM_MODE){
+		int daemon_flag=0;
 		printf("Added RealCom server: ip : %s\n\n", ip);
-	else if (mode == REDUNDANT_MODE)
+
+		// If npreal2d is exist then trigger the -USR1 instead of running mxloadsvr
+
+		/* check if daemon is running or not */
+		do{
+			memset(tmpstr, '\0', TMP_STR_LEN);
+			sprintf(tmpstr, "ps -ef | grep npreal2d | grep -v grep");
+			sprintf(tmpstr, "%s > /usr/lib/npreal2/tmp/nprtmp_checkdaemon", tmpstr);
+			system(tmpstr);
+
+			f = fopen ("/usr/lib/npreal2/tmp/nprtmp_checkdaemon", "r");
+			if (f == NULL)
+			{
+				printf("Failed to open nprtmp_checkdaemon.\n");
+				system("rm -f /usr/lib/npreal2/tmp/nprtmp_checkdaemon ");
+				break;
+			}
+			if (filelength(fileno(f)) != 0)
+			{
+				daemon_flag = 1; /* Means any npreal2d is running now. */
+			}
+			else
+			{
+				daemon_flag = 0;
+			}
+			fclose(f);
+
+			system("rm -f /usr/lib/npreal2/tmp/nprtmp_checkdaemon ");
+		} while (FALSE);
+
+		if( daemon_flag ){
+		    memset(tmpstr, '\0', TMP_STR_LEN);
+		    sprintf(tmpstr, "ps -ef | grep npreal2d | grep -v npreal2d_redund | awk '$0 !~ /grep/ {system(\"kill -USR1 \"$2)}'");
+		    system(tmpstr);
+
+		    //ps -ef | grep npreal2d | grep -v npreal2d_redund | awk '$0 !~ /grep/ {system("kill -USR1 "$2)}'
+
+		} else {
+			sprintf(tmpstr, "%s/mxloadsvr", DRIVERPATH);
+			system(tmpstr);
+		}
+
+	}else if (mode == REDUNDANT_MODE){
 		printf("Added Redundant server: ip1 : %s, ip2 : %s\n\n", ip, Gredundant_ip);
-	sprintf(tmpstr, "%s/mxloadsvr", DRIVERPATH);
-	system(tmpstr);
+		sprintf(tmpstr, "%s/mxloadsvr", DRIVERPATH);
+		system(tmpstr);
+	}
 
 	if (os == "linux")
 	{
-		system("chmod +x /etc/rc.d/rc.local");
+        if( is_init_proc )
+            system("chmod +x /etc/rc.d/rc.local");
 	}
 	else if (os == "linux_rh")
 	{

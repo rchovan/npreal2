@@ -5,7 +5,7 @@
 
 NPPath="/usr/lib/npreal2"
 driverPath="/usr/lib/npreal2/driver"
-OS=""
+OS="linux"
 
 ########################################################################
 # Main procedures
@@ -37,44 +37,54 @@ awk '$0 !~ /grep/ {system("kill -9 "$2)}'
 
 if [ "$OS" = "linux" ]
 then
-    grep -v npreal2 /etc/rc.d/rc.local > /tmp/nprtmp_rclocal2 2>&1
-    cp -f /tmp/nprtmp_rclocal2 /etc/rc.d/rc.local > /dev/null 2>&1
-    rm -f /tmp/nprtmp_rclocal2 > /dev/null 2>&1
+    initproc=`ps --no-headers -o comm 1`
+    if [ $initproc = "init" ]    
+    then
+        grep -v npreal2 /etc/rc.d/rc.local > /usr/lib/npreal2/tmp/nprtmp_rclocal2 2>&1
+        cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal2 /etc/rc.d/rc.local > /dev/null 2>&1
+        rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal2 > /dev/null 2>&1
 
-    grep -v 'npreal2d' /etc/rc.d/rc.local > /tmp/nprtmp_rclocal3
-    cp -f /tmp/nprtmp_rclocal3 /etc/rc.d/rc.local > /dev/null 2>&1
-    rm -f /tmp/nprtmp_rclocal3 > /dev/null 2>&1
-    chmod 755 /etc/rc.d/rc.local > /dev/null 2>&1
+        grep -v 'npreal2d' /etc/rc.d/rc.local > /usr/lib/npreal2/tmp/nprtmp_rclocal3
+        cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal3 /etc/rc.d/rc.local > /dev/null 2>&1
+        rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal3 > /dev/null 2>&1
+        chmod 755 /etc/rc.d/rc.local > /dev/null 2>&1
 
-	chkconfig --del /etc/init.d/npreals > /dev/null 2>&1
-
+        chkconfig --del /etc/init.d/npreals > /dev/null 2>&1
+    elif [ $initproc = "systemd" ]
+    then
+         systemctl disable npreal2.service > /dev/null 2>&1
+         rm -f /usr/lib/npreal2/driver/load_npreal2.sh > /dev/null 2>&1
+         rm -f /etc/systemd/system/npreal2.service > /dev/null 2>&1
+    fi    
 elif [ "$OS" = "debian" ]
 then
-    grep -v npreal2 /etc/init.d/npreals > /tmp/nprtmp_rclocal2 2>&1
-    cp -f /tmp/nprtmp_rclocal2 /etc/init.d/npreals > /dev/null 2>&1
-    rm -f /tmp/nprtmp_rclocal2 > /dev/null 2>&1
+    grep -v npreal2 /etc/init.d/npreals > /usr/lib/npreal2/tmp/nprtmp_rclocal2 2>&1
+    cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal2 /etc/init.d/npreals > /dev/null 2>&1
+    rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal2 > /dev/null 2>&1
 
-    grep -v 'npreal2d' /etc/init.d/npreals > /tmp/nprtmp_rclocal3
-    cp -f /tmp/nprtmp_rclocal3 /etc/init.d/npreals > /dev/null 2>&1
-    rm -f /tmp/nprtmp_rclocal3 > /dev/null 2>&1
+    grep -v 'npreal2d' /etc/init.d/npreals > /usr/lib/npreal2/tmp/nprtmp_rclocal3
+    cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal3 /etc/init.d/npreals > /dev/null 2>&1
+    rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal3 > /dev/null 2>&1
     chmod 755 /etc/init.d/npreals > /dev/null 2>&1
     update-rc.d npreals defaults 90
 elif [ "$OS" = "SuSE" ]
 then
-    grep -v npreal2 /etc/rc.d/boot.local > /tmp/nprtmp_rclocal2 2>&1
-    cp -f /tmp/nprtmp_rclocal2 /etc/rc.d/boot.local > /dev/null 2>&1
-    rm -f /tmp/nprtmp_rclocal2 > /dev/null 2>&1
+    grep -v npreal2 /etc/rc.d/boot.local > /usr/lib/npreal2/tmp/nprtmp_rclocal2 2>&1
+    cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal2 /etc/rc.d/boot.local > /dev/null 2>&1
+    rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal2 > /dev/null 2>&1
 
-    grep -v 'npreal2d' /etc/rc.d/boot.local > /tmp/nprtmp_rclocal3
-    cp -f /tmp/nprtmp_rclocal3 /etc/rc.d/boot.local > /dev/null 2>&1
-    rm -f /tmp/nprtmp_rclocal3 > /dev/null 2>&1
+    grep -v 'npreal2d' /etc/rc.d/boot.local > /usr/lib/npreal2/tmp/nprtmp_rclocal3
+    cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal3 /etc/rc.d/boot.local > /dev/null 2>&1
+    rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal3 > /dev/null 2>&1
     chmod 755 /etc/rc.d/boot.local
 fi
 
 
 rm -f $driverPath/* > /dev/null 2>&1
+rm -f $NPPath/tmp/* > /dev/null 2>&1
 rm -f $NPPath/* > /dev/null 2>&1
 rm -r -f $driverPath > /dev/null 2>&1
+rm -r -f $NPPath/tmp > /dev/null 2>&1
 rm -r -f $NPPath > /dev/null 2>&1
 
 rm -f /lib/modules/`uname -r`/kernel/drivers/char/npreal2.o

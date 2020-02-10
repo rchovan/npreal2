@@ -1,5 +1,5 @@
 ##########################################################################
-#   Copyright (C) 2003-2017  Moxa Inc.
+#   Copyright (C) 2003  Moxa Inc.
 #   All Rights Reserved.
 #
 #
@@ -28,10 +28,11 @@ driverPath="/usr/lib/npreal2/driver"
 MX_MOD=npreal2
 
 #Parameters
-MX_VERSION=3
-MX_PATCH_LEVEL=0
+MX_VERSION=5
+MX_PATCH_LEVEL=3
 MX_SUBLEVEL=0
 MX_VERSION_CODE=$(( ($MX_VERSION<<16)+($MX_PATCH_LEVEL<<8)+$MX_SUBLEVEL ))
+MX_VERSION_MIN=$(( ($MX_VERSION<<16)+(0<<8)+0 ))
 
 K_MODULE_VERSION=$(uname -r)
 K_RELEASE=$(echo $K_MODULE_VERSION | sed -e "s/-.*//g")
@@ -122,15 +123,29 @@ exit 1
 fi
 
 #Check supported kernel version
-if test $MX_VERSION_CODE -gt $K_VERSION_CODE
+if test $MX_VERSION_MIN -gt $K_VERSION_CODE
 then
 echo "********************************WARNING**********************************"
-echo " $ProductName may not be compatible with"
-echo " Linux Kernel versions $K_MODULE_VERSION ."
+echo " $ProductName only support kernel $MX_VERSION.0 or later versions."
+echo " That may not be compatible with Linux Kernel versions $K_MODULE_VERSION ."
 echo " To download the available driver, please visit Moxa at: http://www.moxa.com"
 echo " If you have questions, please contact Moxa support at: support@moxa.com"
 echo "*************************************************************************"
-exit 1
+echo "Press enter to continue..."
+read any
+fi
+
+#Check supported kernel version
+if test $MX_VERSION_CODE -lt $K_VERSION_CODE
+then
+echo "********************************WARNING**********************************"
+echo " $ProductName has been tested under kernel $MX_VERSION.$MX_PATCH_LEVEL.$MX_SUBLEVEL."
+echo " That may not be compatible with Linux Kernel versions $K_MODULE_VERSION ."
+echo " To download the available driver, please visit Moxa at: http://www.moxa.com"
+echo " If you have questions, please contact Moxa support at: support@moxa.com"
+echo "*************************************************************************"
+echo "Press enter to continue..."
+read any
 fi
 }
 
@@ -152,7 +167,7 @@ fi
 
 echo -n "
 ===============================================================================
-Copyright (C) 2002-2017  Moxa Inc.
+Copyright (C) 2002-2019  Moxa Inc.
 All Rights Reserved.
 
 $ProductName "
@@ -272,6 +287,9 @@ case $check in
 	then
 		make clean
 		make ssl PATH1=$(pwd) POLLING=-DOFFLINE_POLLING
+	elif [ "$1" = "concurrent_open" ]
+	then
+		make ssl_con PATH1=$(pwd)	
 	else
 		make ssl PATH1=$(pwd)
 	fi 
@@ -328,7 +346,7 @@ flag=0
 
 mkdir -p $NPPATH > /dev/null 2>&1
 mkdir -p $driverPath > /dev/null 2>&1
-
+mkdir -p $NPPATH/tmp > /dev/null 2>&1
 
 [ -f /usr/lib/npreal2/driver/npreal2d.cf ] || {
     echo -n "Copying configurations files ... "

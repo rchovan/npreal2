@@ -144,7 +144,7 @@ typedef struct _TTYINFO
     char        tcp_wait_id;
     time_t      tty_used_timestamp;
     time_t      first_servertime;
-	int			sameflag;
+	int			static_param;	/* Keep the content of this structure when it is set to 1 for dynamically changing server count. */
 #ifdef  SSL_ON
     SSL *   pssl;
     int     ssl_enable;

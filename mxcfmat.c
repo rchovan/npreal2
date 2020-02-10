@@ -30,7 +30,7 @@ int main(int arg, char *argv[])
         free(token);
         return(0);
     }
-    ft = fopen ("/tmp/npr_tmpfile3", "w");
+    ft = fopen ("/usr/lib/npreal2/tmp/npr_tmpfile3", "w");
     if (ft == NULL)
     {
         printf("file open error2\n");
@@ -92,9 +92,9 @@ int main(int arg, char *argv[])
     fclose(ft);
     fclose(f);
 
-    sprintf(tmpstr, "cp -f /tmp/npr_tmpfile3 %s/npreal2d.cf", DRIVERPATH);
+    sprintf(tmpstr, "cp -f /usr/lib/npreal2/tmp/npr_tmpfile3 %s/npreal2d.cf", DRIVERPATH);
     system(tmpstr);
-    system("rm -f /tmp/npr_tmpfile3");
+    system("rm -f /usr/lib/npreal2/tmp/npr_tmpfile3");
 
     free(tmpstr);
     free(token);

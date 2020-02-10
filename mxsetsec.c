@@ -167,14 +167,47 @@ int SelectNPort()
     return 0;
 }
 
+//
+// Check system init process
+// return 0: systemd, 1: init
+//
+int isinitproc()
+{
+    int ret;
+    char name[5];
+    FILE *f;
+
+    // check the init process is "init" or "systemd"
+    system("ps --no-headers -o comm 1 > /usr/lib/npreal2/tmp/chk_init_proc 2>&1");
+
+    f = fopen("/usr/lib/npreal2/tmp/chk_init_proc", "r");
+    if (f == NULL) {
+       printf("[1] file open error\n");
+       return 1;
+    }
+
+    fgets(name, 5, f);
+    fclose(f);
+
+    ret = strncmp("init", name, 4);
+    if (ret == 0) {
+        system("rm -f /usr/lib/npreal2/tmp/chk_init_proc > /dev/null 2>&1");
+        return 1;
+    }
+
+    system("rm -f /usr/lib/npreal2/tmp/chk_init_proc > /dev/null 2>&1");
+
+    return 0;
+}
+
 int main(int arg, char *argv[])
 {
-    int i, j;
+    int i, j, is_init_proc;
     int len, daemon, num, ret;
     char *tmpstr, *tmp, *os;
     char token[40], tty[10], cout[10], major[20], del[16], sec[10], index[10];
     char data[10], cmd[10], fifo[10], scope[10];
-    char token2[40];
+    char token2[40]={0};
     char mode[10];
     FILE *f, *ft;
 
@@ -184,6 +217,8 @@ int main(int arg, char *argv[])
     tmpstr = (char *)malloc(1024);
     len = 1024;
     tmp = (char *)malloc(20);
+  
+    is_init_proc = isinitproc();
 
     memset(scope, 0x0, sizeof(scope));
     memset(svrList, 0x0, 256*40);
@@ -205,6 +240,7 @@ int main(int arg, char *argv[])
     /* print the list of installed server */
     for (;;)
     {
+		len = 1024;
         if (getline (&tmpstr, (size_t*)&len, f) < 0)
         {
             break;
@@ -286,7 +322,7 @@ int main(int arg, char *argv[])
         free(tmp);
         return(0);
     }
-    ft = fopen ("/tmp/nprtmp_cf", "w");
+    ft = fopen ("/usr/lib/npreal2/tmp/nprtmp_cf", "w");
     if (ft == NULL)
     {
         printf("file open error\n");
@@ -297,6 +333,7 @@ int main(int arg, char *argv[])
 
     for (;;)
     {
+		len = 1024;
         if (getline (&tmpstr, (size_t*)&len, f) < 0)
         {
             break;
@@ -344,10 +381,10 @@ int main(int arg, char *argv[])
     if (f != NULL)
     {
         fclose(f);
-#if (LINUX_VERSION_CODE < VERSION_CODE(3,10,0))
-        os = "linux";
+#if (LINUX_VERSION_CODE == VERSION_CODE(3,10,0))
+        os = "linux_rh";
 #else
-		os = "linux_rh";
+		os = "linux";
 #endif
     }
     else
@@ -372,45 +409,55 @@ int main(int arg, char *argv[])
     {
         if (os == "linux")
         {
-            system("grep -v mxloadsvr /etc/rc.d/rc.local > /tmp/nprtmp_rclocal");
-            system("cp -f /tmp/nprtmp_rclocal /etc/rc.d/rc.local > /dev/null 2>&1");
-            system("rm -f /tmp/nprtmp_rclocal");
+            if (is_init_proc) {
+                system("grep -v mxloadsvr /etc/rc.d/rc.local > /usr/lib/npreal2/tmp/nprtmp_rclocal");
+                system("cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal /etc/rc.d/rc.local > /dev/null 2>&1");
+            } else {
+                system("grep -v mxloadsvr /usr/lib/npreal2/driver/load_npreal2.sh > /usr/lib/npreal2/tmp/nprtmp_rclocal");
+                system("cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal /usr/lib/npreal2/driver/load_npreal2.sh > /dev/null 2>&1");
+            }
 
+            system("rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal");
+            
         }
         else if (os == "linux_rh")
         {
-            system("grep -v mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_rclocal");
-            system("cp -f /tmp/nprtmp_rclocal /etc/init.d/npreals > /dev/null 2>&1");
-            system("rm -f /tmp/nprtmp_rclocal");
-        	system("chkconfig --del /etc/init.d/npreals > /dev/null 2>&1");
+            system("grep -v mxloadsvr /etc/init.d/npreals > /usr/lib/npreal2/tmp/nprtmp_rclocal");
+            system("cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal /etc/init.d/npreals > /dev/null 2>&1");
+            system("rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal");
+            system("chkconfig --del /etc/init.d/npreals > /dev/null 2>&1");
 
         }
         else if (os == "debian")
         {
-            system("grep -v mxloadsvr /etc/init.d/npreals > /tmp/nprtmp_rclocal");
-            system("cp -f /tmp/nprtmp_rclocal /etc/init.d/npreals > /dev/null 2>&1");
-            system("rm -f /tmp/nprtmp_rclocal");
+            system("grep -v mxloadsvr /etc/init.d/npreals > /usr/lib/npreal2/tmp/nprtmp_rclocal");
+            system("cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal /etc/init.d/npreals > /dev/null 2>&1");
+            system("rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal");
             system("update-rc.d npreals defaults 90");
 
         }
         else if (os == "SuSE")
         {
-            system("grep -v mxloadsvr /etc/rc.d/boot.local > /tmp/nprtmp_rclocal");
-            system("cp -f /tmp/nprtmp_rclocal /etc/rc.d/boot.local > /dev/null 2>&1");
-            system("rm -f /tmp/nprtmp_rclocal");
+            system("grep -v mxloadsvr /etc/rc.d/boot.local > /usr/lib/npreal2/tmp/nprtmp_rclocal");
+            system("cp -f /usr/lib/npreal2/tmp/nprtmp_rclocal /etc/rc.d/boot.local > /dev/null 2>&1");
+            system("rm -f /usr/lib/npreal2/tmp/nprtmp_rclocal");
 
         }
     }
 
-    sprintf(tmpstr, "cp -f /tmp/nprtmp_cf %s/npreal2d.cf", DRIVERPATH);
+    sprintf(tmpstr, "cp -f /usr/lib/npreal2/tmp/nprtmp_cf %s/npreal2d.cf", DRIVERPATH);
     system(tmpstr);
-    system("rm -f /tmp/nprtmp_cf");
+    system("rm -f /usr/lib/npreal2/tmp/nprtmp_cf");
 
     sprintf(tmpstr, "%s/mxloadsvr", DRIVERPATH);
     system(tmpstr);
     if (os == "linux")
-    {
-        system("chmod +x /etc/rc.d/rc.local");
+    {   
+        if (is_init_proc) {
+            system("chmod +x /etc/rc.d/rc.local");
+        } else {
+            system("chmod +x /usr/lib/npreal2/driver/load_npreal2.sh");
+        }
     }
     else if (os == "linux_rh")
     {

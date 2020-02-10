@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2001-2012  Moxa Inc.
+ *      Copyright (C) 2001  Moxa Inc.
  *      All rights reserved.
  *
  *      Moxa NPort/Async Server UNIX Real TTY daemon program.
@@ -2547,7 +2547,7 @@ void redund_poll_nport_recv(int af_type)
     if ( dsci_headerp->opcode == 0x81 ||
         ((dsci_headerp->opcode == DSCI_IPV6_RESPONS) && ((htons(dsci_headerp->length)-44)%16 == 0)))
     {     // dsc_search respons
-        char tmpbuf[128];
+        char tmpbuf[4096];
         servp->ap_id = ntohl(dsci_retp->ap_id);
         servp->hw_id = ntohs(dsci_retp->hw_id);
         memcpy((void*)servp->mac, (void*)dsci_retp->mac, 6);

@@ -1,5 +1,5 @@
 /*
- *	Copyright (C) 2001-2012  Moxa Inc.
+ *	Copyright (C) 2001  Moxa Inc.
  *	All rights reserved.
  *
  *	Moxa NPort/Async Server UNIX Real TTY daemon program.
@@ -554,7 +554,7 @@ char *	cmdpath;
 	FILE *		ConfigFd;
 	struct hostent *host;
 	TTYINFO *	infop;
-	char		workpath[160], buf[160];
+	char		workpath[128], buf[160];
 	char		ttyname[160],tcpport[16],cmdport[16];
 	char		ttyname2[160], curname[160], scope_id[10];
 	int			redundant_mode;

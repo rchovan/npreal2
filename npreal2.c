@@ -2,7 +2,7 @@
 /*
  *          npreal2.c  -- MOXA NPort Server family Real TTY driver.
  *
- *      Copyright (C) 1999-2012  Moxa Inc. (support@moxa.com.tw).
+ *      Copyright (C) 1999  Moxa Inc. (support@moxa.com.tw).
  *
  *      This code is loosely based on the Linux serial driver, written by
  *      Linus Torvalds, Theodore T'so and others.
@@ -88,6 +88,12 @@
 #endif
 
 #include "np_ver.h"
+
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,0,0))
+#define ACCESS_OK(x,y,z) access_ok(x,y,z)
+#else
+#define ACCESS_OK(x,y,z) access_ok(y,z)
+#endif
 
 /* include/linux/semaphore.h modification */
 #define init_MUTEX(sem) sema_init(sem, 1)
@@ -180,6 +186,7 @@ MODULE_LICENSE("GPL");
 #define NPREAL_NET_GET_TTY_STATUS	6
 
 #define	NPREAL_CMD_TIMEOUT		10*HZ  // 10 seconds
+#define NPREAL_CMD_TRY				10
 
 #define	NPREAL_NET_CMD_RETRIEVE		1
 #define	NPREAL_NET_CMD_RESPONSE		2
@@ -772,6 +779,12 @@ npreal_open(
 	int			line;
 	unsigned long		page;
 	struct nd_struct  	*nd;
+	int	error_try;
+#ifndef CONCURRENT_SSL
+	long st;
+	long tmp_t;
+#endif
+	int	ret;
 
 	DBGPRINT(MX_DEBUG_LOUD, "(Entry)\n");
 
@@ -819,12 +832,44 @@ npreal_open(
 	tty->driver_data = info;
 	info->count++;
 	// Scott: end
-
-	if (npreal_startup(info,filp,tty))
+	
+	error_try=NPREAL_CMD_TRY;
+	while(1)
 	{
-		DBGPRINT(MX_DEBUG_ERROR, "npreal_startup failed\n");
-		return(-EIO);
+		// For some circumstance, device may reset the connection during the
+		// port opening. These code is to reopen the port without telling
+		// application. Considering a real situation of connection lost, we
+		// use -ETIME to exit the retry loop.
+		ret = npreal_startup(info,filp,tty);
+
+		if( ret==0 )
+			break;
+#ifndef CONCURRENT_SSL
+		else if( ret==(-ETIME) ){
+			DBGPRINT(MX_DEBUG_ERROR, "npreal_startup failed(%d)\n", ret);
+			return(-EIO);
+		}
+		
+		//DBGPRINT(MX_DEBUG_ERROR, "npreal_startup return(%d, %d, %d)\n", info->port, error_try, ret);
+		st = jiffies;
+		error_try--;
+		
+		while(1){
+			tmp_t = _get_delta_giffies(st);
+			if( tmp_t >= ((NPREAL_CMD_TRY-error_try)*HZ/2) )
+				break;
+		}
+#endif
+		
+		if( error_try>0 ){
+			DBGPRINT(MX_DEBUG_WARN, "npreal_startup retry\n");
+			continue;
+		}else{
+			DBGPRINT(MX_DEBUG_ERROR, "npreal_startup failed\n");
+			return(-EIO);
+		}
 	}
+	
 	if (npreal_block_til_ready(tty, filp, info))
 	{
 		DBGPRINT(MX_DEBUG_ERROR, "npreal_block_til_ready failed\n");
@@ -1319,21 +1364,15 @@ static int npreal_ioctl(struct tty_struct * tty,
 		npreal_send_break(info, arg ? arg*(HZ/10) : HZ/4);
 		return(0);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
-#define compat_access_ok(u,v,w) access_ok(v,w)
-#else
-#define compat_access_ok(u,v,w) access_ok(u,v,w)
-#endif
-
 	case TIOCGSOFTCAR:
-		error = compat_access_ok(VERIFY_WRITE, (void *)arg, sizeof(long))?0:-EFAULT;
+		error = ACCESS_OK(VERIFY_WRITE, (void *)arg, sizeof(long))?0:-EFAULT;
 		if ( error )
 			return(error);
 		put_to_user(C_CLOCAL(tty) ? 1 : 0, (unsigned long *)arg);
 		return 0;
 
 	case TIOCSSOFTCAR:
-		error = compat_access_ok(VERIFY_READ, (void *)arg, sizeof(long))?0:-EFAULT;
+		error = ACCESS_OK(VERIFY_READ, (void *)arg, sizeof(long))?0:-EFAULT;
 		if ( error )
 			return(error);
 		get_from_user(templ,(unsigned long *)arg);
@@ -1348,21 +1387,21 @@ static int npreal_ioctl(struct tty_struct * tty,
 		return(0);
 
 	case TIOCGSERIAL:
-		error = compat_access_ok(VERIFY_WRITE, (void *)arg,
+		error = ACCESS_OK(VERIFY_WRITE, (void *)arg,
 				sizeof(struct serial_struct))?0:-EFAULT;
 		if ( error )
 			return(error);
 		return(npreal_get_serial_info(info, (struct serial_struct *)arg));
 
 	case TIOCSSERIAL:
-		error = compat_access_ok(VERIFY_READ, (void *)arg,
+		error = ACCESS_OK(VERIFY_READ, (void *)arg,
 				sizeof(struct serial_struct))?0:-EFAULT;
 		if ( error )
 			return(error);
 		return(npreal_set_serial_info(info, (struct serial_struct *)arg));
 
 	case TIOCSERGETLSR: /* Get line status register */
-		error = compat_access_ok(VERIFY_WRITE, (void *)arg,
+		error = ACCESS_OK(VERIFY_WRITE, (void *)arg,
 				sizeof(unsigned int))?0:-EFAULT;
 		if ( error )
 			return(error);
@@ -1419,7 +1458,7 @@ static int npreal_ioctl(struct tty_struct * tty,
 	 *     RI where only 0->1 is counted.
 	 */
 	case TIOCGICOUNT:
-		error = compat_access_ok(VERIFY_WRITE, (void *)arg,
+		error = ACCESS_OK(VERIFY_WRITE, (void *)arg,
 				sizeof(struct serial_icounter_struct))?0:-EFAULT;
 		if ( error )
 			return(error);
@@ -1755,8 +1794,9 @@ static int npreal_startup(struct npreal_struct * info,struct file *filp,struct t
 	char rsp_buffer[8];
 	int  rsp_length = sizeof(rsp_buffer);
 	int	cnt = 0;
-	DECLARE_WAITQUEUE(wait, current);
+	int ret = -EIO;
 
+	DECLARE_WAITQUEUE(wait, current);
 	DBGPRINT(MX_DEBUG_LOUD, "(Entry)\n");
 
 	if (!(nd=info->net_node))
@@ -1838,15 +1878,17 @@ static int npreal_startup(struct npreal_struct * info,struct file *filp,struct t
 		{
 			wake_up_interruptible( &nd->select_ex_wait );
 		}
-		if (npreal_wait_command_completed(nd,
+
+		//DBGPRINT(MX_DEBUG_ERROR, "(P%02d)Sending LOCAL_CMD_TTY_USED command.\n", info->port);
+		ret = npreal_wait_command_completed(nd,
 				NPREAL_LOCAL_COMMAND_SET,
 				LOCAL_CMD_TTY_USED,
 				NPREAL_CMD_TIMEOUT, // Scott MAX_SCHEDULE_TIMEOUT,
 				rsp_buffer,
-				&rsp_length) != 0)
-		{
+				&rsp_length);
 
-			DBGPRINT(MX_DEBUG_ERROR, "wait for LOCAL_CMD_TTY_USED response failed\n");
+		if( ret != 0){
+			DBGPRINT(MX_DEBUG_WARN, "(P%02d)Warning: wait for LOCAL_CMD_TTY_USED response\n", info->port);
 			npreal_wait_and_set_command(nd,NPREAL_LOCAL_COMMAND_SET,LOCAL_CMD_TTY_UNUSED);
 			nd->cmd_buffer[2] = 0;
 			nd->cmd_ready = 1;
@@ -1868,7 +1910,7 @@ static int npreal_startup(struct npreal_struct * info,struct file *filp,struct t
 			/* Check connection fail */
 			if(!rsp_buffer[2])
 			{
-				DBGPRINT(MX_DEBUG_ERROR, "LOCAL_CMD_TTY_USED shows connection failed\n");
+				DBGPRINT(MX_DEBUG_ERROR, "(P%02d)LOCAL_CMD_TTY_USED shows connection failed\n" info->port);
 				npreal_wait_and_set_command(nd,NPREAL_LOCAL_COMMAND_SET,LOCAL_CMD_TTY_UNUSED);
 				nd->cmd_buffer[2] = 0;
 				nd->cmd_ready = 1;
@@ -1890,6 +1932,35 @@ static int npreal_startup(struct npreal_struct * info,struct file *filp,struct t
 	}
 	else
 	{
+
+		if (nd->flag & NPREAL_NET_NODE_DISCONNECTED)
+		{
+			DBGPRINT(MX_DEBUG_WARN, "(P%02d)Reseting connection\n", info->port);
+			nd->flag &= ~NPREAL_NET_NODE_DISCONNECTED;
+			npreal_wait_and_set_command(nd,NPREAL_LOCAL_COMMAND_SET,LOCAL_CMD_TTY_UNUSED);
+			nd->cmd_buffer[2] = 0;
+			nd->cmd_ready = 1;
+			if ( waitqueue_active(&nd->select_ex_wait))
+			{
+				wake_up_interruptible( &nd->select_ex_wait );
+			}
+			ret = npreal_wait_command_completed(nd,
+					NPREAL_LOCAL_COMMAND_SET,
+					LOCAL_CMD_TTY_UNUSED, // LOCAL_CMD_TTY_USED,
+					NPREAL_CMD_TIMEOUT, // Scott MAX_SCHEDULE_TIMEOUT,
+					rsp_buffer,
+					&rsp_length);
+
+			if( ret!=0 ){
+				nd->flag |= NPREAL_NET_NODE_DISCONNECTED;
+				DBGPRINT(MX_DEBUG_WARN, "(P%02d)Fail\n", info->port);
+			}else{
+				nd->flag &= ~NPREAL_NET_TTY_INUSED;  //clean inused flag
+				DBGPRINT(MX_DEBUG_WARN, "(P%02d)Reset\n", info->port);
+			}		
+			goto startup_err;
+		}		
+
 		while ((nd->cmd_ready == 1)&&(cnt++ < 10))
 		{
 			current->state = TASK_INTERRUPTIBLE;
@@ -1909,9 +1980,9 @@ static int npreal_startup(struct npreal_struct * info,struct file *filp,struct t
 #endif
 			info->modem_control = UART_MCR_DTR | UART_MCR_RTS;
 
-	if (npreal_port_init(info, 0) != 0) {
-		DBGPRINT(MX_DEBUG_ERROR, "npreal_port_init() failed\n");
-
+	ret = npreal_port_init(info, 0);
+	if (ret != 0) {
+		DBGPRINT(MX_DEBUG_WARN, "(P%02d)Warning: Retry npreal_port_init()\n", info->port);
 		goto startup_err;
 	}
 	if (info->type == PORT_16550A)
@@ -1924,11 +1995,20 @@ static int npreal_startup(struct npreal_struct * info,struct file *filp,struct t
 	else
 		info->xmit_fifo_size = 1;
 
-	if (npreal_wait_and_set_command(nd,NPREAL_ASPP_COMMAND_SET,ASPP_CMD_TX_FIFO) < 0)
+#ifdef CONCURRENT_SSL
+	cnt=0;
+	while( (ret = npreal_wait_and_set_command(nd,NPREAL_ASPP_COMMAND_SET,ASPP_CMD_TX_FIFO) )< 0 )
 	{
-		DBGPRINT(MX_DEBUG_ERROR, "Set ASPP_CMD_TX_FIFO failed\n");
+		DBGPRINT(MX_DEBUG_WARN, "(P%02d)Warning: Retry ASPP_CMD_TX_FIFO\n", info->port);
+	}
+#else
+	ret = npreal_wait_and_set_command(nd,NPREAL_ASPP_COMMAND_SET,ASPP_CMD_TX_FIFO);
+	if ( ret < 0)
+	{
+		DBGPRINT(MX_DEBUG_WARN, "(P%02d)Warning: Retry ASPP_CMD_TX_FIFO\n", info->port);
 		goto startup_err;
 	}
+#endif
 	nd->cmd_buffer[2] = 1;
 	nd->cmd_buffer[3] = info->xmit_fifo_size;
 	nd->cmd_ready = 1;
@@ -1937,13 +2017,15 @@ static int npreal_startup(struct npreal_struct * info,struct file *filp,struct t
 		wake_up_interruptible( &nd->select_ex_wait );
 	}
 	rsp_length = sizeof(rsp_buffer);
-	if (npreal_wait_command_completed(nd,
+	ret = npreal_wait_command_completed(nd,
 			NPREAL_ASPP_COMMAND_SET,
 			ASPP_CMD_TX_FIFO,NPREAL_CMD_TIMEOUT,
 			rsp_buffer,
-			&rsp_length) != 0)
+			&rsp_length);
+	if ( ret != 0 )
 	{
-		DBGPRINT(MX_DEBUG_ERROR, "Wait for ASPP_CMD_TX_FIFO response failed\n");
+		DBGPRINT(MX_DEBUG_WARN, "Warning: Wait for ASPP_CMD_TX_FIFO response\n");
+		ret = (-EIO);
 		goto startup_err;
 	}
 
@@ -1960,8 +2042,10 @@ static int npreal_startup(struct npreal_struct * info,struct file *filp,struct t
 	clear_bit(NPREAL_NET_DO_INITIALIZE,&nd->flag);
 	if ( waitqueue_active(&nd->initialize_wait))
 		wake_up_interruptible( &nd->initialize_wait );
+	//DBGPRINT(MX_DEBUG_ERROR, "(P%02d)Open successfully..\n", info->port);
 	return(0);
-	startup_err:
+
+startup_err:
 	;
 	npreal_disconnect(nd, rsp_buffer, &rsp_length);
 	free_page(page);
@@ -1969,7 +2053,7 @@ static int npreal_startup(struct npreal_struct * info,struct file *filp,struct t
 	clear_bit(NPREAL_NET_DO_INITIALIZE,&nd->flag);
 	if ( waitqueue_active(&nd->initialize_wait))
 		wake_up_interruptible( &nd->initialize_wait );
-	return -EIO;
+	return ret;
 }
 
 /*
@@ -2052,6 +2136,7 @@ static int npreal_port_init(struct npreal_struct *info,
 	struct 	nd_struct	*nd;
 	char rsp_buffer[8];
 	int  rsp_length = sizeof(rsp_buffer);
+	int ret = -EIO;
 
 	DBGPRINT(MX_DEBUG_LOUD, "(Entry)\n");
 
@@ -2214,7 +2299,7 @@ static int npreal_port_init(struct npreal_struct *info,
 		baudIndex = ASPP_IOCTL_B50;
 		break;
 	default:
-		baud = 0;
+		baud = tty_termios_baud_rate(termio);
 		baudIndex = 0xff;
 	}
 #ifdef ASYNC_SPD_CUST
@@ -2229,10 +2314,14 @@ static int npreal_port_init(struct npreal_struct *info,
 		termio->c_cflag |=
 				old_termios->c_cflag &(CBAUD|CBAUDEX);
 	}
-	if (npreal_wait_and_set_command(nd,NPREAL_ASPP_COMMAND_SET,ASPP_CMD_PORT_INIT) < 0)
+#ifdef CONCURRENT_SSL
+CONSSL2:
+#endif
+	ret = npreal_wait_and_set_command(nd,NPREAL_ASPP_COMMAND_SET,ASPP_CMD_PORT_INIT);
+	if (ret < 0)
 	{
-		DBGPRINT(MX_DEBUG_ERROR, "set ASPP_CMD_PORT_INIT failed\n");
-		return (-EIO);
+		DBGPRINT(MX_DEBUG_WARN, "Warning: Retry ASPP_CMD_PORT_INIT\n");
+		return ret;
 	}
 	nd->cmd_buffer[2] = 8;
 	//
@@ -2287,23 +2376,30 @@ static int npreal_port_init(struct npreal_struct *info,
 	if ( waitqueue_active(&nd->select_ex_wait))
 		wake_up_interruptible( &nd->select_ex_wait );
 
-	if (npreal_wait_command_completed(nd,
+	ret = npreal_wait_command_completed(nd,
 			NPREAL_ASPP_COMMAND_SET,
 			ASPP_CMD_PORT_INIT, NPREAL_CMD_TIMEOUT,
 			rsp_buffer,
-			&rsp_length))
+			&rsp_length);
+	if (ret)
 	{
-		DBGPRINT(MX_DEBUG_ERROR, "wait ASPP_CMD_PORT_INIT response failed\n");
+		DBGPRINT(MX_DEBUG_WARN, "(P%02d)Warning: Wait ASPP_CMD_PORT_INIT response\n", info->port);
+#ifdef CONCURRENT_SSL
+		goto CONSSL2;
+#else
 		return(-EIO);
+#endif
 	}
 	if (rsp_length != 6)
 	{
 		DBGPRINT(MX_DEBUG_ERROR, "invalid ASPP_CMD_PORT_INIT response1\n");
+		//goto TEST_ERR2;
 		return(-EIO);
 	}
 	if (rsp_buffer[2] != 3)
 	{
 		DBGPRINT(MX_DEBUG_ERROR, "invalid ASPP_CMD_PORT_INIT response2\n");
+		//goto TEST_ERR2;
 		return(-EIO);
 	}
 	modem_status = 0;
@@ -2332,10 +2428,13 @@ static int npreal_port_init(struct npreal_struct *info,
 
 	if ((baudIndex == 0xff)&&(baud != 0))
 	{
-		if (npreal_wait_and_set_command(nd,NPREAL_ASPP_COMMAND_SET,ASPP_CMD_SETBAUD) < 0)
+#ifdef CONCURRENT_SSL
+CONSSL3:
+#endif
+		if ((ret=npreal_wait_and_set_command(nd,NPREAL_ASPP_COMMAND_SET,ASPP_CMD_SETBAUD)) < 0)
 		{
 			DBGPRINT(MX_DEBUG_ERROR, "set ASPP_CMD_SETBAUD failed\n");
-			return(-EIO);
+			return ret;
 		}
 		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)
 		{
@@ -2348,24 +2447,30 @@ static int npreal_port_init(struct npreal_struct *info,
 		if ( waitqueue_active(&nd->select_ex_wait))
 			wake_up_interruptible( &nd->select_ex_wait );
 		rsp_length = sizeof (rsp_buffer);
-		if (npreal_wait_command_completed(nd,
+		if ((ret=npreal_wait_command_completed(nd,
 				NPREAL_ASPP_COMMAND_SET,
 				ASPP_CMD_SETBAUD,NPREAL_CMD_TIMEOUT,
 				rsp_buffer,
-				&rsp_length))
+				&rsp_length)))
 		{
-			DBGPRINT(MX_DEBUG_ERROR, "wait ASPP_CMD_SETBAUD response failed\n");
-			return(-EIO);
+			DBGPRINT(MX_DEBUG_WARN, "Warning: Wait ASPP_CMD_SETBAUD response\n");
+#ifdef CONCURRENT_SSL
+			goto CONSSL3;
+#else			
+			return (-EIO);
+#endif
 		}
 		if (rsp_length != 4)
 		{
 			DBGPRINT(MX_DEBUG_ERROR, "invalid ASPP_CMD_SETBAUD response1\n");
+			//goto TEST_ERR3;
 			return(-EIO);
 		}
 		if ((rsp_buffer[2] != 'O') ||
 				(rsp_buffer[3] != 'K') )
 		{
 			DBGPRINT(MX_DEBUG_ERROR, "invalid ASPP_CMD_SETBAUD response2\n");
+			//goto TEST_ERR3;
 			return(-EIO);
 		}
 
@@ -2373,10 +2478,13 @@ static int npreal_port_init(struct npreal_struct *info,
 
 	if (termio->c_iflag & (IXON | IXOFF))
 	{
-		if (npreal_wait_and_set_command(nd,NPREAL_ASPP_COMMAND_SET,ASPP_CMD_XONXOFF))
+#ifdef CONCURRENT_SSL
+CONSSL4:
+#endif
+		if ((ret=npreal_wait_and_set_command(nd,NPREAL_ASPP_COMMAND_SET,ASPP_CMD_XONXOFF)))
 		{
-			DBGPRINT(MX_DEBUG_ERROR, "set ASPP_CMD_XONXOFF failed\n");
-			return -EIO;
+			DBGPRINT(MX_DEBUG_WARN, "Warning: Retry ASPP_CMD_XONXOFF \n");
+			return ret;
 		}
 		nd->cmd_buffer[2] = 2;
 		nd->cmd_buffer[3] = termio->c_cc[VSTART];
@@ -2385,24 +2493,29 @@ static int npreal_port_init(struct npreal_struct *info,
 		if ( waitqueue_active(&nd->select_ex_wait))
 			wake_up_interruptible( &nd->select_ex_wait );
 		rsp_length = sizeof (rsp_buffer);
-		if (npreal_wait_command_completed(nd,
+		if ((ret=npreal_wait_command_completed(nd,
 				NPREAL_ASPP_COMMAND_SET,
 				ASPP_CMD_XONXOFF,NPREAL_CMD_TIMEOUT,
 				rsp_buffer,
-				&rsp_length))
+				&rsp_length)))
 		{
-			DBGPRINT(MX_DEBUG_ERROR, "wait ASPP_CMD_XONXOFF response failed\n");
+			DBGPRINT(MX_DEBUG_WARN, "(P%02d)Warnig: Wait ASPP_CMD_XONXOFF response\n", info->port);
+#ifdef CONCURRENT_SSL
+			goto CONSSL4;
+#endif
 			return(-EIO);
 		}
 		if (rsp_length != 4)
 		{
 			DBGPRINT(MX_DEBUG_ERROR, "invalid ASPP_CMD_XONXOFF response1\n");
+			//goto TEST_ERR4;
 			return(-EIO);
 		}
 		if ((rsp_buffer[2] != 'O') ||
 				(rsp_buffer[3] != 'K') )
 		{
 			DBGPRINT(MX_DEBUG_ERROR, "invalid ASPP_CMD_XONXOFF response2\n");
+			//goto TEST_ERR4;
 			return(-EIO);
 		}
 
@@ -3370,6 +3483,7 @@ npreal_net_ioctl (
 	case NPREAL_NET_CMD_RETRIEVE :
 		if (!nd->cmd_ready)
 		{
+			DBGPRINT(MX_DEBUG_ERROR, "(P%02d) NET_CMD_RETRIEVE Error @ %d\n", nd->tty_node->port, __LINE__);
 			rtn = -ENXIO;
 			goto done;
 		}
@@ -3377,13 +3491,17 @@ npreal_net_ioctl (
 			len = nd->do_session_recovery_len;
 		else
 			len = (int)nd->cmd_buffer[2] + 3;
-		rtn = compat_access_ok( VERIFY_WRITE, (void *)arg, len)?0:-EFAULT;
+		rtn = ACCESS_OK( VERIFY_WRITE, (void *)arg, len)?0:-EFAULT;
 		if ( rtn )
 		{
+			DBGPRINT(MX_DEBUG_ERROR, "(P%02d) NET_CMD_RETRIEVE Error @ %d\n", nd->tty_node->port, __LINE__);
 			goto done;
 		}
+		//DBGPRINT(MX_DEBUG_ERROR, "(P%02d) NET_CMD_RETRIEVE(0x%02X)\n", nd->tty_node->port, nd->cmd_buffer[1]);
+
 		if (copy_to_user( (void *)arg, (void *)nd->cmd_buffer,len ))
 		{
+			DBGPRINT(MX_DEBUG_ERROR, "(P%02d) NET_CMD_RETRIEVE Error @ %d\n", nd->tty_node->port, __LINE__);
 			rtn = -EFAULT;
 			goto done;
 		}
@@ -3401,7 +3519,7 @@ npreal_net_ioctl (
 		if (size > 84)
 			size = 84;
 
-		rtn = compat_access_ok( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
+		rtn = ACCESS_OK( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
 		if ( rtn )
 		{
 			goto done;
@@ -3411,6 +3529,8 @@ npreal_net_ioctl (
 			rtn = -EFAULT;
 			goto done;
 		}
+
+		//DBGPRINT(MX_DEBUG_ERROR, "(P%02d) NET_CMD_RESPONSE(0x%02X)\n", nd->tty_node->port, rsp_buffer[1]);
 
 		if (rsp_buffer[0] == NPREAL_LOCAL_COMMAND_SET)
 		{
@@ -3497,6 +3617,8 @@ npreal_net_ioctl (
 	case NPREAL_NET_CONNECTED :
 	{
 		struct npreal_struct *info;
+		
+		//DBGPRINT(MX_DEBUG_ERROR, "(P%02d) NET_CMD_CONNECTED\n", nd->tty_node->port);
 
 		if (!(info=nd->tty_node))
 			break;
@@ -3526,7 +3648,7 @@ npreal_net_ioctl (
 		if (size != sizeof (status))
 			goto done;
 
-		rtn = compat_access_ok( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
+		rtn = ACCESS_OK( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
 		if ( rtn )
 		{
 			goto done;
@@ -3551,7 +3673,7 @@ npreal_net_ioctl (
 		if (size != sizeof (struct server_setting_struct))
 			goto done;
 
-		rtn = compat_access_ok( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
+		rtn = ACCESS_OK( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
 		if ( rtn )
 		{
 			goto done;
@@ -3914,7 +4036,10 @@ npreal_wait_and_set_command(
 
 	if ((command_set != NPREAL_LOCAL_COMMAND_SET)&&((nd->flag & NPREAL_NET_DO_SESSION_RECOVERY)||(nd->flag&NPREAL_NET_NODE_DISCONNECTED)))
 	{
-		return (-1);
+		DBGPRINT(MX_DEBUG_WARN, "Flags: 0x%lX\n", nd->flag);
+		if( nd->flag & NPREAL_NET_DO_SESSION_RECOVERY )
+			return (-EAGAIN);
+		return (-EIO);
 	}
 
 	nd->cmd_rsp_flag = 0;
@@ -3962,11 +4087,13 @@ npreal_wait_command_completed(
 
 	if ((command_set != NPREAL_LOCAL_COMMAND_SET)&&((nd->flag & NPREAL_NET_DO_SESSION_RECOVERY)||(nd->flag&NPREAL_NET_NODE_DISCONNECTED)))
 	{
-		return (-1);
+		if( nd->flag & NPREAL_NET_DO_SESSION_RECOVERY )
+			return (-EAGAIN);
+		return (-EIO);
 	}
 
 	if (*rsp_len <= 0)
-		return (-1);
+		return (-EIO);
 
 	while (1)
 	{
@@ -3987,7 +4114,7 @@ npreal_wait_command_completed(
 			up(&nd->cmd_semaphore);
 			if ( signal_pending(current) )
 			{
-				return(-1);
+				return(-EIO);
 			}
 
 			st = jiffies;
@@ -4015,7 +4142,7 @@ npreal_wait_command_completed(
 		else
 		{ // timeout
 			up(&nd->cmd_semaphore);
-			return (-1);
+			return (-ETIME);
 		}
 	}
 }

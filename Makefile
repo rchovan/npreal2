@@ -1,14 +1,15 @@
 PATH1="."
 BUILD_DATE:=$(shell date +%g%m%d%H)
-BUILD_VERSION:=1.19
+BUILD_VERSION:=5.0
 
 ##############################################################
-# Linux Kernel 3.0
+# Linux Kernel 5.0
 ##############################################################
 
 all: module npreal2d npreal2d_redund tools
 SP1: module npreal2d npreal2d_redund tools
 ssl: module SSLnpreal2d npreal2d_redund tools
+ssl_con: module_con SSLnpreal2d npreal2d_redund tools
 SP1_ssl: module SSLnpreal2d npreal2d_redund tools
 ssl64: module SSL64npreal2d npreal2d_redund tools
 SP1_ssl64: module SSL64npreal2d npreal2d_redund tools
@@ -68,10 +69,17 @@ KDIR	:= /lib/modules/$(shell uname -r)/build
 PWD	:= $(shell pwd)
 
 module:
-	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
 	cp -p npreal2.ko /lib/modules/$(shell uname -r)/kernel/drivers/char/
 #	cp -p npreal2.ko /lib/modules/$(shell uname -r)/misc/
 	depmod -a
+
+module_con:
+	KCPPFLAGS="-DCONCURRENT_SSL" $(MAKE) -C $(KDIR) M=$(PWD) modules
+	cp -p npreal2.ko /lib/modules/$(shell uname -r)/kernel/drivers/char/
+#	cp -p npreal2.ko /lib/modules/$(shell uname -r)/misc/
+	depmod -a
+
 
 endif
 
@@ -114,11 +122,13 @@ clean:
 	rm -f mxloadsvr
 	rm -f mxsetsec
 	rm -f Module.symvers
+	rm -f .cache.mk
 	
 pack:
-	rm -rf ../../disk/moxa
-	mkdir ../../disk/moxa
-	cp * ../../disk/moxa
-	tar -C ../../disk -zcvf ../../disk/npreal2_mainline_v${BUILD_VERSION}_build_${BUILD_DATE}.tgz moxa
-	rm -rf ../../disk/moxa
+	rm -rf ../disk/moxa
+	mkdir ../disk/moxa
+	cp * ../disk/moxa
+	tar -C ../disk -zcvf ../disk/npreal2_v${BUILD_VERSION}_build_${BUILD_DATE}.tgz moxa
+	rm -rf ../disk/moxa
+	cp VERSION.TXT ../disk
 

@@ -3,8 +3,8 @@
 
                               README file
 
-  Date: 11-02-2017
-  Copyright (C) 2004-2017, MOXA Inc. All rights reserved.
+  Date: 10-18-2019
+  Copyright (C) 2004, MOXA Inc. All rights reserved.
 ========================================================================
 Content
 
@@ -21,28 +21,33 @@ Content
 11. Removing the Driver
 12. Modification of "npreal2d.cf"
 13. Modification of Initializing Script
-14. Add additional server
-15. Limitation
-16. Technical Support
+14. Enable background polling feature
+15. Troubleshooting
+16. Limitation
+17. Technical Support
 ------------------------------------------------------------------------
 1. Introduction
     The purpose of this driver is to map NPort serial port to host tty
     port. Using this driver, you can use NPort serial port as local
     tty port.
 
+    Real TTY only support installation by building kernel module. Users 
+    should be familiar with Linux kernel. For the distribuion user, the
+    kernel source, headers, or images are required and they are normally
+    offered by distribution website. User may refer the distribution
+    manual to prepare for building kernel module.
+ 
 2. OS Supports
     This driver can run under following systems.
-    a. Primary Linux distribution (kernel 3.0 or later)
+    a. Primary Linux distribution (kernel 5.0 or later)
        (Support IPV4 and IPV6)
     
     Following distributions are tested when releasing.
-    a. OpenSUSE Leap 42.3 x64 (4.4.76-1)
-    b. Fedora 26 x64 (4.11.8-300)
-    c. CentOS 7.4 x64 (3.10.0-693)
-    d. Ubuntu 17.04 x86 (4.10.0-19)
-    e. Debian 9.1.0x64 (4.9.0-3-amd64)
-    f. Raspbian Jessie on Pi 2 (4.4.50-v7+)
-    g. Raspbian Jessie on Pi 3 (4.1.19-v7+)    
+	a. Arch(5.2.11)
+	b. VM-Ubuntu 19.04 x64 (5.0.0)
+	c. Ubuntu 19.04 x64 (5.0.0)
+	d. Ubuntu 19.10 x64 (5.3.0)
+	e. Fedora 30 x64 (5.0.9)
 
 3. System Requirement
     To install this driver, you will need NPort Server and one of the
@@ -62,7 +67,17 @@ Content
     Additional requirements for Raspbian
      -  gcc-4.8.3 or above 
      -  ncurses-devel-5.9 or above
-     -  rpi-source (https://github.com/notro/rpi-source/wiki)
+     -  rpi-source, read the instruction from it's website.
+        (https://github.com/notro/rpi-source/wiki)
+
+    Note:
+     - rpi-source is a 3rd party package offering integrated kernel resouce
+       for building driver. Real TTY are tested with this package and working
+       well. However the requirements may be various for different Raspbian
+       version. Please read the manual of Raspbian and rpi-source to
+       understand the knowhow and limitation.
+     - Real TTY driver with Raspbian Jessie(4.4.50) and Buster(4.19) are
+       tested on Pi 2/3.
 
 4. Procedure
     To map NPort serial port to host tty port, you need to:
@@ -96,7 +111,7 @@ Content
     !!!!!!!!!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 6. Installing the Driver File
-    a. Copy the driver file from the products CD-ROM or Moxa website.
+    a. Copy the driver file from website, under the product page.
     b. Log in to the console as a super user (root).
     c. Execute "cd " to change to the home directory.
     d. Copy the driver file npreal2xx.tgz to the home directory.
@@ -374,52 +389,35 @@ Content
        The driver will append the instructions which is used to load
        Real TTY driver in the script file.
 
-14. Add additional server
-     Step 1     
-       Modify "npreal2d.cf" file to add additional server, or remove unused 
-       server. User can use vi or any edit to modify it. It's a text file.
-       For more configuration information, please take a look
-       at npreal2d.cf file. We put detail decription on it.
-
-     Step 2  
-       Find the proccess id (PID) of program "npreal2d".
-        # ps -ef | grep npreal2d
-
-     Step 3  
-       Update configuration of moxattyd program.
-        # kill -USR1 PID
-       (ex. if "npreal2d" PID = 404, "kill -USR1 404")
-
-     Finish : You have finished to add additional server, 
-              or remove unused server.
-     
-     [CAUTION]: 
-	Please use the "mxaddsvr" to generate a temporary file for npreal2d.cf
-	and follow the temporary file to modify "npreal2d.cf" if user don't 
-	know how to modify the "npreal2d.cf" file .
-	
-	User can reference chapter 12 to understand the detail.
-	
-15. Enable background polling feature
+14. Enable background polling feature
 	If you don't want your program been blocked when open tty port with NPort
     not exist, you should enable this feature. This feature will polling NPort
     device in background to eliminate the time your program been blocked.
        
     Following steps shows how to enable this feature
 
-    a. Copy the driver file from the products CD-ROM or Moxa website.
+    a. Copy the driver file from website, under the product page.
     b. Log in to the console as a super user (root).
     c. Execute "cd " to change to the home directory.
     d. Copy the driver file npreal2xx.tgz to the home directory.
     e. Execute "tar xvfz npreal2xx.tgz" to copy all files into the system.
     f. Execute "./moxa/mxinst polling".
 	
+15. Troubleshooting
+    1. Open multiple tty concurrently in secure mdoe
+       Since openssl cause internal system call error when opening multiple
+       tty concurrently, the opening might be failed. If application requires
+       to open tty concurrently, re-install driver with "concurrent_open"
+       parameter. E.g. "./moxa/mxinst concurrent_open"
+       Driver will take longer time to detecte network disconnection with this
+       setting.
+
 16. Limitation
-     1. Redundant COM Mode
-	NPort driver needs ONE minute the most to synchronize with NPort device
-	after the LAN port resumes connection.
-	Therefore, during the maximum one minute synchronization if any one
-	network connection loses again, data lose might happen. 
+    1. Redundant COM Mode
+       NPort driver needs ONE minute the most to synchronize with NPort device
+       after the LAN port resumes connection.
+       Therefore, during the maximum one minute synchronization if any one
+       network connection loses again, data lose might happen. 
 
 17. Technical Support
      If you have any technical questions, please send your question by

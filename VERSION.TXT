@@ -1,10 +1,29 @@
-Product:	NPort Linux Real TTY Driver (V2)
-Version:	1.19 Build 17110917
-Date:		11/09/2017
+Product:	NPort Linux Real TTY Driver 
+Version:	5.0 Build 19101814
+Date:		10/18/2019
 Company:	Moxa Inc.
             
 Release Note:
 =============
+ver5.0 Build 19101814
+1. New: Support systemd process to load driver. 
+2. Improve: The connections of opened TTY ports will not be disconnected then
+            reconnected when adding or removing servers. The related
+	    description is also removed in README.txt due to the users are not
+	    required to manually send SIGUSR1 to activate configuration changes.
+3. Improve: Supports Virtual Machine, ESXi v6.7.0 is tested with guest OS
+            Ubuntu 18.10 x64 and Ubuntu 19.04 x64.
+4. Improve: Supports ARM based Linux, with Raspbian is tested.
+5. Bugfix: Driver doesn't set non-standard baud rate correctly.
+6. Bugfix: Compiling error with message "malloc.c2401: sysmalloc: Assertion" in
+           Fedora release 28.
+7. Bugfix: In Fedora release 24/26, the service daemon can't start NPort service
+           properly after restarting OS.
+8. Bugfix: Fix driver cannot determine the init process correctly when delete
+           NPort server.
+9. Change: Divided an independent driver version 5.0 to support only Linux
+           kernel 5.x.
+
 ver1.19 Build 17110917
 1. New: Support Raspbian Jessie or later for Raspberry Pi 2/3.
 2. New: Add driver background polling feature to eliminate the waiting time

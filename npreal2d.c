@@ -1,5 +1,5 @@
 /*
- *	Copyright (C) 2001-2012  Moxa Inc.
+ *	Copyright (C) 2001  Moxa Inc.
  *	All rights reserved.
  *
  *	Moxa NPort/Async Server UNIX Real TTY daemon program.
@@ -59,8 +59,8 @@ int		pipefd[2];
 int		maxfd;
 int     timeout_time = 0;
 int		polling_time=0; 	/* default disable polling function */
-int		polling_fd;
-int     polling_nport_fd[2]; /* [0] is for IPv4 whereas [1] is for IPv6. They are socket handles to NPort with DSCI, UDP. */
+int		polling_fd;				/* This is a socket handler for polling Async Server periodically. */
+int     polling_nport_fd[2];    /* [0] is for IPv4 whereas [1] is for IPv6. They are sockets handlers for polling NPort net status(DSCI, UDP). */
 int		Restart_daemon;
 static	int	No_tty_defined;
 static	int enable_ipv6=2;  /*2 enable ipv6, 1 disenable ipv6*/
@@ -73,6 +73,9 @@ extern	char	*ptsname();
 static void ssl_init(void);
 SSL_CTX *sslc_ctx;
 #endif
+
+int	g_tcp_wait_id = 0;
+//static char mm[128];
 
 #ifndef	STREAM
 void	restart_handle ();
@@ -101,6 +104,7 @@ void poll_nport_send(SERVINFO *servp);
 void poll_async_server_recv();
 void poll_async_server_send(SERVINFO *servp);
 void moxattyd_daemon_start();
+int CheckConnecting();
 
 #ifdef SSL_ON
 void ConnectSSL( TTYINFO *infop );
@@ -116,6 +120,7 @@ char *	argv[];
 	TTYINFO *	infop;
 	char ver[100];
 	int		i;
+
 	Restart_daemon = 0;
 	No_tty_defined = 0;
 	polling_fd = -1; /* Add by Ying */
@@ -197,6 +202,9 @@ char *	argv[];
 
 		if ( moxattyd_read_config(argv[0]) <= 0 )
 		{
+			//sprintf(mm, "logger \"CFD>(%d, %s) Read CFG Error.\"", __LINE__, __FUNCTION__);
+			//system(mm);
+
 			if (!No_tty_defined)
 			{
 				log_event ("Not any tty defined");
@@ -211,11 +219,15 @@ char *	argv[];
 		/*
 		 * Initialize this Moxa TTYs daemon process.
 		 */
-		if (!Restart_daemon)
+		if (!Restart_daemon && !Gconfig_changed)
 			moxattyd_daemon_start();
 
+		if( Gconfig_changed ){
+			Gconfig_changed = 0;
+		}
+
 		/*
-		 * Initialize polling async server function.
+		 * Initialize polling NPort and Async Server function.
 		 */
 		if ( polling_time && (poll_async_server_init() < 0) )
 		{
@@ -550,7 +562,7 @@ char *	cmdpath;
 	FILE *		ConfigFd;
 	struct hostent *host;
 	TTYINFO *	infop;
-	char		workpath[160], buf[160];
+	char		workpath[128], buf[160];
 	char		ttyname[160],tcpport[16],cmdport[16];
 	char		ttyname2[160], curname[160], scope_id[10];
 	int			redundant_mode;
@@ -560,6 +572,9 @@ char *	cmdpath;
 #else
 	int32_t		temp;
 #endif
+	char		tmpstr[256];
+	char		ip_addr[40];
+	char		redund_ip[40];
 
 	redundant_mode = 0;
 	// Scott: 2005-10-03
@@ -573,7 +588,6 @@ char *	cmdpath;
 	sprintf(buf,"%s/npreal2d.cf", workpath);        /* Config file name */
 	sprintf(EventLog,"%s/npreal2d.log", workpath);  /* Log file name */
 	strcpy(Gcffile, buf);
-
 
 	/*
 	 * Open configuration file:
@@ -614,7 +628,6 @@ char *	cmdpath;
 		if ( fgets(buf, sizeof(buf), ConfigFd) == NULL )
 			break;				/* end of file */
 
-		memset(&infop->redund, 0, sizeof(struct redund_struct));
 		server_type = disable_fifo = 0;
 
 #ifdef SSL_ON
@@ -623,7 +636,7 @@ char *	cmdpath;
 
 		n = sscanf(buf, "%s%s%s%s%d%d%s%s%s%d%s",
 				ttyname,
-				infop->ip_addr_s,
+				ip_addr,
 				tcpport,
 				cmdport,
 				&disable_fifo,
@@ -635,8 +648,8 @@ char *	cmdpath;
 				ttyname2,
 				curname,
 				scope_id,
-				&infop->redundant_mode,
-				infop->redund.redund_ip);
+				&redundant_mode,
+				redund_ip);
 
 		if(n != 10 && n != 11)
 		{
@@ -662,6 +675,43 @@ char *	cmdpath;
 
 		if (ttyname[0]=='#')
 			continue;
+
+		// Ignore to update data from npreal2d.cf if static_param is set.
+		sprintf(tmpstr,"/proc/npreal2/%s",ttyname);
+		while( infop->static_param ){
+			if( strcmp(infop->mpt_name, tmpstr)==0 &&
+				strcmp(infop->ip_addr_s, ip_addr)==0 &&
+				infop->tcp_port == atoi(tcpport) )
+			{
+				//sprintf(mm, "logger \"CFD>(%d, %s) Same CFG is read(%s).\"", __LINE__, __FUNCTION__, infop->mpt_name);
+				//system(mm);
+				break;;
+			}
+
+			infop++;
+			ttys++;
+			if( ttys>=MAX_TTYS ){
+				log_event("Out of memory for ttys!");
+				fclose(ConfigFd);
+				return (-1);
+			}
+		}
+
+		if( infop->static_param ){
+			//This configuration line is duplicate and should be ignored.
+			infop++;
+			ttys++;
+			continue;
+		}
+
+		//sprintf(mm, "logger \"CFD>(%d, %s) New CFG is read(%s).\"", __LINE__, __FUNCTION__, infop->mpt_name);
+		//system(mm);
+
+		strcpy( infop->ip_addr_s, ip_addr );
+		infop->redundant_mode = redundant_mode;
+		strcpy( infop->redund.redund_ip, redund_ip );
+
+		memset(&infop->redund, 0, sizeof(struct redund_struct));
 
 		Graw_mode = 1;
 		Gredund_mode = 1;
@@ -738,10 +788,10 @@ char *	cmdpath;
 		strcpy(infop->ttyname, ttyname);
 		strcpy(infop->ttyname2, ttyname2);
 		strcpy(infop->curname, curname);
-		infop->sameflag = 0;
+		infop->static_param = 0;
 		infop->server_type = server_type;
 		infop->disable_fifo = disable_fifo;
-		infop->tcp_wait_id = 0;
+		infop->tcp_wait_id = g_tcp_wait_id;
 		if (!Restart_daemon)
 			infop->tty_used_timestamp = 0;
 		infop->first_servertime = 0;
@@ -875,7 +925,7 @@ int poll_async_server_init()
 
 	servers = 0;
 
-	// This loop assign server id and update uptime for each ttys_info[].
+	// This loop group ttys with a given sequence server id by IP address and update uptime for each ttys_info[].
 	for ( i=0; i<ttys; i++ )
 	{
 		for ( n=0; n<servers; n++ )
@@ -908,6 +958,7 @@ int poll_async_server_init()
 			ttys_info[i].serv_index = n; // Scott added: 2005-03-02
 	}
 
+	// Bind socket for polling NPort net status DSCI.
 	for(i=0; i<2; i++)
 	{
 		ptr = (i == IS_IPV4)? (struct sockaddr*)&sin : (struct sockaddr*)&sin6;
@@ -953,6 +1004,8 @@ int poll_async_server_init()
 			return(-1);
 		}
 	}
+
+	// Bind socket for polling Async Server.
 	if ( (polling_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 )
 	{
 		log_event("Can not open the polling UDP socket !");
@@ -1371,7 +1424,7 @@ int af_type;
 	if ( dsci_headerp->opcode == 0x81 ||
 			((dsci_headerp->opcode == DSCI_IPV6_RESPONS) && ((htons(dsci_headerp->length)-44)%16 == 0)))
 	{     // dsc_search respons
-		char tmpbuf[128];
+		char tmpbuf[4096];
 		servp->ap_id = ntohl(dsci_retp->ap_id);
 		servp->hw_id = ntohs(dsci_retp->hw_id);
 		memcpy((void*)servp->mac, (void*)dsci_retp->mac, 6);
@@ -1549,6 +1602,7 @@ int moxattyd_change_config() {
 #ifdef SSL_ON
 	int32_t		ssl_enable;
 #endif
+
 	printf("start moxaddyd_change_config ttys = %d\n", ttys);
 	printf("Gcffile = %s\n", Gcffile);
 	ConfigFd = fopen(Gcffile, "r");
@@ -1559,6 +1613,7 @@ int moxattyd_change_config() {
 		return(-1);
 	}
 
+	// Read npreal2d.cf to chttys_info.
 	chttys = 0;
 	infop = chttys_info;
 	while ( chttys < MAX_TTYS ) {
@@ -1593,6 +1648,7 @@ int moxattyd_change_config() {
 		if (ttyname[0] == '#') {
 			continue;
 		}
+
 		if (disable_fifo == 1) {
 			disable_fifo = 0;
 		} else {
@@ -1601,21 +1657,9 @@ int moxattyd_change_config() {
 
 		resolve_dns_host_name(infop);
 
-#if 0
-		if(lib_name2ip6(infop) == -1)
-		{
-			log_event("ip address fail!!");
-			continue;
-		}
-
-		if(infop->af == AF_INET)
-		{
-			if ( *(u_long*)infop->ip6_addr == (uint32_t)0xFFFFFFFF )
-				continue;
-		}
-#endif
 		if ( (data = atoi(tcpport)) <= 0 || data >= 10000 )
 			continue;
+
 		if ( (cmd = atoi(cmdport)) <= 0 || cmd >= 10000 )
 			continue;
 
@@ -1631,10 +1675,12 @@ int moxattyd_change_config() {
 		{
 			memset(infop->scope_id, 0, 10);
 		}
-		printf("\n");
-		sprintf(infop->mpt_name, "/proc/npreal2/%s", ttyname);
 
+		printf("\n");
+
+		sprintf(infop->mpt_name, "/proc/npreal2/%s", ttyname);
 		infop->tcp_port = data;
+
 		infop->cmd_port = cmd;
 		infop->mpt_fd = -1;
 		infop->sock_fd = -1;
@@ -1656,7 +1702,7 @@ int moxattyd_change_config() {
 		infop->error_flags = 0;
 		infop->server_type = server_type;
 		infop->disable_fifo = disable_fifo;
-		infop->tcp_wait_id = 0;
+		infop->tcp_wait_id = g_tcp_wait_id;
 		strcpy(infop->ttyname, ttyname);
 		strcpy(infop->ttyname2, ttyname2);
 		strcpy(infop->curname, curname);
@@ -1677,6 +1723,7 @@ int moxattyd_change_config() {
 
 	fclose(ConfigFd);
 
+	// If npreal2d.cf contains running ttys, copy parameters from original ttys.
 	orip = ttys_info;
 	for (i = 0; i < ttys; i++, orip++) {
 		infop = chttys_info;
@@ -1684,8 +1731,8 @@ int moxattyd_change_config() {
 			if (strcmp(orip->mpt_name, infop->mpt_name) == 0) {
 				if (strcmp(orip->ip_addr_s, infop->ip_addr_s) == 0) {
 					if (orip->tcp_port == infop->tcp_port) {
+						orip->static_param = 1; /* Don't reset the ttys_info[i] until all servers are initialized. */
 						memcpy(&chttys_info[j], &ttys_info[i], sizeof(TTYINFO));
-						orip->sameflag = 1; /* new_info == old_info */
 						break;
 					}
 				}
@@ -1694,41 +1741,65 @@ int moxattyd_change_config() {
 	}
 	orip = ttys_info;
 #if 1
+
+	// Close all ttys are not exist in npreal2d.cf
 	for (i = 0; i < ttys; i++, orip++) {
-		if (orip->sameflag != 1) { /* new_info != old_info */
+		if (orip->static_param != 1) { /* new_info != old_info */
+			//sprintf(mm, "logger \"CFD>(%d, %s) closed tty %s \"", __LINE__, __FUNCTION__, orip->ttyname);
+			//system(mm);
+
 			close(orip->mpt_fd);
 			close(orip->sock_fd);
 			close(orip->sock_cmd_fd);
+
+			//sprintf(mm, "logger \"CFD>(%d, %s) Deleting ttyname2=%s\"", __LINE__, __FUNCTION__, orip->ttyname2);
+			//system(mm);
+
+			sprintf(tmp_cmd, "rm -rf /dev/%s", orip->ttyname2);
+			system(tmp_cmd);
+
+			sprintf(tmp_cmd, "rm -rf /dev/%s", orip->curname);
+			system(tmp_cmd);
 		}
 	}
 #endif
-	printf("start\n");
-	printf("start\n");
+
+	// Copy all ttys in npreal2d.cf to current structures
+	//printf("start\n");
 	for (i = 0; i < chttys; i++) {
 		memcpy(&ttys_info[i], &chttys_info[i], sizeof(TTYINFO));
-		printf("ip = %s\n", chttys_info[i].ip_addr_s);
-		printf("name = %s\n", chttys_info[i].ttyname);
-		printf("name2 = %s\n", chttys_info[i].ttyname2);
+		//printf("ip = %s\n", chttys_info[i].ip_addr_s);
+		//printf("name = %s\n", chttys_info[i].ttyname);
+		//printf("name2 = %s\n", chttys_info[i].ttyname2);
+		//sprintf(mm, "logger \"CFD>(%d, %s) Available ip=%s\"", __LINE__, __FUNCTION__, chttys_info[i].ip_addr_s);
+		//system(mm);
+		//sprintf(mm, "logger \"CFD>(%d, %s) Available name=%s\"", __LINE__, __FUNCTION__, chttys_info[i].ttyname);
+		//system(mm);
+		//sprintf(mm, "logger \"CFD>(%d, %s) Available name2=%s\"", __LINE__, __FUNCTION__, chttys_info[i].ttyname2);
+		//system(mm);
 	}
-	printf("end\n");
-	printf("end\n");
-	for (i = ttys; i < chttys; i++) {
-#if 1
-		sprintf(tmp_cmd, "rm -rf /dev/%s", ttys_info[i].ttyname2);
-		system(tmp_cmd);
+	//printf("end\n");
+
+	// Rebuild all device nodes
+	for (i = 0; i < chttys; i++) {
+
+		if( ttys_info[i].static_param )
+			continue;
+
+		//sprintf(mm, "logger \"CFD>(%d, %s) Create node for ttyname2=%s\"", __LINE__, __FUNCTION__, ttys_info[i].ttyname2);
+		//system(mm);
+
 		sprintf(tmp_cmd, "/usr/lib/npreal2/driver/mxmknod %s 33 %s",
 				ttys_info[i].ttyname2, ttys_info[i].ttyname);
 		//		sprintf(tmp_cmd, "mknod -Z system_u:object_r:tty_device_t:s0 -m 666 /dev/%s c 33 %s",
 		//						 &ttys_info[i].ttyname2, &ttys_info[i].ttyname);
 		system(tmp_cmd);
-		sprintf(tmp_cmd, "rm -rf /dev/%s", ttys_info[i].curname);
-		system(tmp_cmd);
+
 		sprintf(tmp_cmd, "/usr/lib/npreal2/driver/mxmknod %s 38 %s",
 				ttys_info[i].curname, ttys_info[i].ttyname);
 		//		sprintf(tmp_cmd, "mknod -Z system_u:object_r:tty_device_t:s0 -m 666 /dev/%s c 33 %s",
 		//						 &ttys_info[i].curname, &ttys_info[i].ttyname);
 		system(tmp_cmd);
-#endif
 	}
 
 	ttys = chttys;
@@ -1770,7 +1841,9 @@ void moxattyd_handle_ttys()
 			return;
 		}
 		if (Gconfig_changed > 0) {
-			Gconfig_changed = 0;
+			//sprintf(mm, "logger \"CFD> %d, %s\"", __LINE__, __FUNCTION__);
+			//system(mm);
+			break;
 		}
 
 		tm.tv_sec = 3;
@@ -1783,6 +1856,12 @@ void moxattyd_handle_ttys()
 		tcp_wait_count = 0;
 		for ( i=0, infop=ttys_info; i<ttys; i+=1, infop+=1 )
 		{
+			if( !Gconfig_changed && infop->static_param ){
+				//sprintf(mm, "logger \"CFD>(%d, %s) static_param cleared(%s).\"", __LINE__, __FUNCTION__, infop->mpt_name);
+				//system(mm);
+				infop->static_param = 0;
+			}
+
 			if (infop->redundant_mode)
 				continue;
 
@@ -1793,18 +1872,27 @@ void moxattyd_handle_ttys()
 			//	log_event(msg);
 			//}
 
+			//sprintf(mm, "logger \"CFD>(%d) STATE=0x%X\"", infop->tcp_port, infop->state);
+			//system(mm);
+
 			if ( infop->state == STATE_INIT ||
 					infop->state == STATE_MPT_OPEN ||
 					infop->state == STATE_MPT_REOPEN )
 			{
+				//sprintf(mm, "logger \"CFD>(%d, %s) Opening(%s).\"", __LINE__, __FUNCTION__, infop->mpt_name);
+				//system(mm);
+
 				OpenTty(infop);
 			}
 
 			if ( infop->state == STATE_CONN_FAIL )
 			{
 				sysinfo(&sys_info);
-				if ( (sys_info.uptime - infop->time_out) >= 1 )
+				if ( (sys_info.uptime - infop->time_out) >= 1 ){
+					//sprintf(mm, "logger \"CFD>(%d) Set TCP_OPEN @ %d, %s\"", infop->tcp_port, __LINE__, __FUNCTION__);
+					//system(mm);
 					infop->state = STATE_TCP_OPEN;
+				}
 			}
 
 			if ( infop->state == STATE_TCP_OPEN )
@@ -1948,8 +2036,11 @@ void moxattyd_handle_ttys()
 		{
 			if (infop->redundant_mode)
 				continue;
-			if (Gconfig_changed > 0)
+			if (Gconfig_changed > 0){
+				//sprintf(mm, "logger \"CFD> %d, %s\"", __LINE__, __FUNCTION__);
+				//system(mm);
 				break;
+			}
 			if ( infop->mpt_fd < 0)
 				continue;
 			if ( (infop->mpt_fd)&&FD_ISSET(infop->mpt_fd, &efd) )
@@ -1960,6 +2051,8 @@ void moxattyd_handle_ttys()
 				{
 					if (infop->mpt_cmdbuf[0] == NPREAL_ASPP_COMMAND_SET)
 					{
+						//sprintf(mm, "logger \"CFD>(%d) ASPP CMD=0x%02X @ %d <==\"", infop->tcp_port, infop->mpt_cmdbuf[1], __LINE__);
+						//system(mm);
 						write (infop->sock_cmd_fd,
 								infop->mpt_cmdbuf+1,n-1);
 					}
@@ -1968,6 +2061,13 @@ void moxattyd_handle_ttys()
 						switch (infop->mpt_cmdbuf[1])
 						{
 						case LOCAL_CMD_TTY_USED:
+#ifdef SSL_ON
+							//sprintf(mm, "logger \"CFD>(%d) CMD_TTY_USED, state=0x%X, (pssl=0x%x)\"", infop->tcp_port, infop->state, infop->pssl);
+#else
+							//sprintf(mm, "logger \"CFD>(%d) CMD_TTY_USED, state=0x%X\"", infop->tcp_port, infop->state);
+#endif
+							//system(mm);
+
 							if (infop->state != STATE_TTY_WAIT)
 							{
 #ifdef SSL_ON
@@ -1990,12 +2090,21 @@ void moxattyd_handle_ttys()
 								log_event(cmd_buf);
 								sleep(1);
 							}
+							//sprintf(mm, "logger \"CFD>(%d) Set TCP_OPEN @ %d, %s\"", infop->tcp_port, __LINE__, __FUNCTION__);
+							//system(mm);
 							infop->state = STATE_TCP_OPEN;
 							sysinfo(&sys_info);
 							infop->tty_used_timestamp = sys_info.uptime;
 							continue;
 
 						case LOCAL_CMD_TTY_UNUSED:
+#ifdef SSL_ON
+							//sprintf(mm, "logger \"CFD>(%d) CMD_TTY_UNUSED, (pssl=0x%x)\"", infop->tcp_port, infop->pssl);
+#else
+							//sprintf(mm, "logger \"CFD>(%d) CMD_TTY_UNUSED\"", infop->tcp_port);
+#endif
+							//system(mm);
+
 #ifdef SSL_ON
 							if (infop->ssl_enable)
 							{
@@ -2050,6 +2159,16 @@ void moxattyd_handle_ttys()
 						CMD_BUFFER_SIZE)) <= 0)
 				{
 #ifdef SSL_ON
+
+					//sprintf(mm, "logger \"CFD>(%d) len=%d, errno: %d, %s @ %d <==\"", infop->tcp_port, len, errno, strerror(errno), __LINE__);
+					//system(mm);
+
+					if( CheckConnecting() ){
+						infop->state = STATE_TCP_CLOSE;
+						infop->reconn_flag = 1;
+						continue;
+					}
+
 					if (infop->ssl_enable)
 					{
 						SSL_shutdown(infop->pssl);
@@ -2064,11 +2183,16 @@ void moxattyd_handle_ttys()
 					infop->local_tcp_port = 0;
 					infop->local_cmd_port = 0;
 					infop->state = STATE_TCP_OPEN;
+					//sprintf(mm, "logger \"CFD>(%d) Set TCP_OPEN @ %d, %s\"", infop->tcp_port, __LINE__, __FUNCTION__);
+					//system(mm);
 					ioctl(infop->mpt_fd,
 							_IOC(_IOC_READ|_IOC_WRITE,'m',CMD_DISCONNECTED,0),
 							0);
 					continue;
 				}
+				//sprintf(mm, "logger \"CFD>(%d) ASPP GOT=0x%02X @ %d <==\"", infop->tcp_port, infop->sock_cmdbuf[0], __LINE__);
+				//system(mm);
+
 				n = 0;
 				while (len > 0)
 				{
@@ -2178,6 +2302,17 @@ void moxattyd_handle_ttys()
 				else if (n <= 0)
 				{
 #ifdef SSL_ON
+
+					//n=SSL_get_error(infop->pssl, n);
+					//sprintf(mm, "logger \"CFD>(%d) SSL_get_error=%d @ %d, %s\"", infop->tcp_port, n, __LINE__, __FUNCTION__);
+					//system(mm);
+
+					if( CheckConnecting() ){
+						infop->state = STATE_TCP_CLOSE;
+						infop->reconn_flag = 1;
+						continue;
+					}
+
 					if (infop->ssl_enable)
 					{
 						SSL_shutdown(infop->pssl);
@@ -2192,6 +2327,8 @@ void moxattyd_handle_ttys()
 					infop->local_tcp_port = 0;
 					infop->local_cmd_port = 0;
 					infop->state = STATE_TCP_OPEN;
+					//sprintf(mm, "logger \"CFD>(%d) Set TCP_OPEN @ %d, %s\"", infop->tcp_port, __LINE__, __FUNCTION__);
+					//system(mm);
 					ioctl(infop->mpt_fd,
 							_IOC(_IOC_READ|_IOC_WRITE,'m',CMD_DISCONNECTED,0),
 							0);
@@ -2407,7 +2544,7 @@ TTYINFO *	infop;
 	resolve_dns_host_name(infop);
 
 	infop->state = STATE_TCP_WAIT;
-	infop->tcp_wait_id++;
+	infop->tcp_wait_id = (++g_tcp_wait_id);
 	if ( (childpid = fork()) == 0 )
 	{	/* child process */
 		msg.tcp_wait_id = infop->tcp_wait_id;
@@ -2530,6 +2667,66 @@ TTYINFO *	infop;
 	int	fd, flags, ret;
 	struct sysinfo	sys_info;
 	char buf[100];
+	TTYINFO * chk_infop;
+	int i;
+
+	if( infop->ssl_time==0 ){
+		for ( i=0, chk_infop=ttys_info; i<ttys; i+=1, chk_infop+=1 )
+		{
+			// Scan all ports and check if there is also ports in STATE_SSL_CONN state.
+			// We should avoid multiple ports to call SSL_connect together.
+			// Otherwise SSL core migth got Alert (Decrypt_Error 51) and reset previous connection.
+			// Here we let connection call SSL_connect by ttys_info sequence to avoid this issue.
+			// Windows driver has similar behavior as it.
+			
+			if( (chk_infop->state==STATE_SSL_CONN) && (chk_infop->ssl_time!=0)  ){
+				//sprintf(mm, "logger \"CFD>(%d) Wait (%d) for SSL..\"", infop->tcp_port, chk_infop->tcp_port);
+				//system(mm);
+				return;
+			}       
+		}
+	}
+
+	sysinfo(&sys_info);
+	if( infop->ssl_time==0 ){
+		infop->ssl_time = sys_info.uptime;
+	} else {
+		//if ((sys_info.uptime - infop->ssl_time) < 3 ){
+		//infop->ssl_time = sys_info.uptime;
+		//      return;
+		//}
+	}
+
+	//infop->ssl_time = sys_info.uptime;
+	if (infop->pssl==NULL)
+	{
+		infop->pssl = SSL_new(sslc_ctx);
+		//sprintf(mm, "logger \"CFD>(%d) pssl=0x%X..\"", infop->tcp_port, infop->pssl);
+		//system(mm);
+		
+		if (infop->pssl != NULL)
+		{
+			if (SSL_set_fd(infop->pssl, infop->sock_fd))
+			{
+				//sprintf(mm, "logger \"CFD>(%d) set_connect_state..\"", infop->tcp_port);
+				//system(mm);
+				SSL_set_connect_state(infop->pssl);
+			}
+			else
+			{
+				//sprintf(mm, "logger \"CFD>(%d) SSL_set_fd() error..\"", infop->tcp_port);
+				//system(mm);
+				log_event("SSL_set_fd() error!");
+			}
+		}
+		else
+		{
+			//sprintf(mm, "logger \"CFD>(%d) SSL_new() error..\"", infop->tcp_port);
+			//system(mm);
+			log_event("SSL_new() error!");
+		}
+	}
+
 
 	fd = infop->sock_fd;
 
@@ -2553,7 +2750,7 @@ TTYINFO *	infop;
 		{
 			if ((ret = SSL_connect(infop->pssl)) > 0)
 			{
-				fcntl(fd, F_SETFL, flags);
+				infop->ssl_time = 0;
 				infop->state = STATE_RW_DATA;
 			}
 			else
@@ -2566,10 +2763,19 @@ TTYINFO *	infop;
 					infop->state = STATE_SSL_CONN;
 					log_event("SSL_ERROR_WANT_WRITE");
 					break;
+				case SSL_ERROR_SYSCALL:
+					//sprintf(mm, "logger \"CFD>(%d) errno: %d, %s @ %d <==\"", infop->tcp_port, errno, strerror(errno), __LINE__);
+					//system(mm);
+					
+					//SSL_shutdown(infop->pssl);
+					//SSL_free(infop->pssl);
+					//infop->pssl = NULL;
+					infop->state = STATE_TCP_CLOSE;
+					infop->reconn_flag = 1;
+					break;
 				case SSL_ERROR_ZERO_RETURN:
 				case SSL_ERROR_WANT_CONNECT:
 				case SSL_ERROR_WANT_X509_LOOKUP:
-				case SSL_ERROR_SYSCALL:
 				case SSL_ERROR_SSL:
 					infop->state = STATE_TCP_CLOSE;
 					infop->reconn_flag = 0;
@@ -2580,6 +2786,9 @@ TTYINFO *	infop;
 			}
 		}
 	}
+	fcntl(fd, F_SETFL, flags);
+
+#if 0
 	sysinfo(&sys_info);
 	if ((sys_info.uptime - infop->ssl_time) > 5 )
 	{
@@ -2587,6 +2796,7 @@ TTYINFO *	infop;
 		infop->reconn_flag = 0;
 		log_event("Your target machine might not be set secure mode.");
 	}
+#endif
 }
 #endif
 
@@ -2598,7 +2808,7 @@ TTYINFO *	infop;
 	ConnMsg 		msg;
 
 	infop->state = STATE_TCP_WAIT;
-	infop->tcp_wait_id++;
+	infop->tcp_wait_id = (++g_tcp_wait_id);
 	if ( (childpid = fork()) == 0 )
 	{	/* child process */
 		msg.tcp_wait_id = infop->tcp_wait_id;
@@ -2702,6 +2912,17 @@ void ConnectCheck()
 #ifdef SSL_ON
 				if (infop->ssl_enable)
 				{
+					//sysinfo(&sys_info);
+					//infop->ssl_time = sys_info.uptime;
+					infop->ssl_time = 0;
+					infop->state = STATE_SSL_CONN;
+					// Create new SSL in ConnectSSL() after previous SSL connected
+				}
+#endif
+
+#if 0
+				if (infop->ssl_enable)
+				{
 					infop->pssl = SSL_new(sslc_ctx);
 					if (infop->pssl != NULL)
 					{
@@ -2724,7 +2945,7 @@ void ConnectCheck()
 					/*if (SSL_connect(infop->pssl) < 0){
 								printf("SSL_connect() error.\n");
 					SSL_free(infop->pssl);
-				}*/
+					}*/
 				}
 #endif
 			}
@@ -2836,6 +3057,7 @@ void	connect_wait_handle (int sig)
 }
 
 #ifdef	SSL_ON
+#define CIPHER_LIST "ALL:@STRENGTH"
 static void ssl_init(void)
 {
 	SSLeay_add_ssl_algorithms();
@@ -2851,6 +3073,12 @@ static void ssl_init(void)
 #endif
 #endif
 
+	SSL_CTX_set_options(sslc_ctx, SSL_OP_ALL|SSL_OP_NO_SSLv2);
+	if( SSL_CTX_set_cipher_list(sslc_ctx, CIPHER_LIST) != 1 ){
+		//sprintf(mm, "logger \"CFD> set_cipher_error %d, %s\"", __LINE__, __FUNCTION__);
+		//system(mm);
+	}
+
 	/* For blocking mode: cause read/write operations to only return after the handshake and successful completion. */
 	SSL_CTX_set_mode(sslc_ctx, SSL_MODE_AUTO_RETRY);
 }
@@ -2862,7 +3090,11 @@ void    config_changed_handle ()
 void    config_changed_handle (int sig)
 #endif
 {
+	//sprintf(mm, "logger \"CFD> %d, %s\"", __LINE__, __FUNCTION__);
+	//system(mm);
 	moxattyd_change_config();
+	//sprintf(mm, "logger \"CFD> %d, %s\"", __LINE__, __FUNCTION__);
+	//system(mm);
 	Gconfig_changed = 1;
 #ifndef STREAM
 	signal (SIGUSR1, ( (void (*)()) config_changed_handle) );
@@ -3022,4 +3254,21 @@ int	ipv6_str_to_ip(char *str, unsigned char *ip)
 		return NP_RET_ERROR;
 
 	return NP_RET_SUCCESS;
+}
+
+int CheckConnecting()
+{
+	TTYINFO * chk_infop;
+	int i;
+	
+#ifdef SSL_ON
+	for ( i=0, chk_infop=ttys_info; i<ttys; i+=1, chk_infop+=1 )
+	{
+		if( (chk_infop->state==STATE_SSL_CONN) ){
+			return 1; 
+		}       
+	}
+#endif
+
+	return 0;
 }
