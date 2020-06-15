@@ -89,11 +89,15 @@
 
 #include "np_ver.h"
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(5,0,0))
+
+#if (LINUX_VERSION_CODE >= VERSION_CODE(5,0,0))
 #define ACCESS_OK(x,y,z) access_ok(x,y,z)
 #else
+
 #define ACCESS_OK(x,y,z) access_ok(y,z)
+
 #endif
+
 
 /* include/linux/semaphore.h modification */
 #define init_MUTEX(sem) sema_init(sem, 1)
