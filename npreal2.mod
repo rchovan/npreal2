@@ -1,2 +1,2 @@
-/opt/moxa.git/npreal2.v5/npreal2.o
+/opt/moxa.git/npreal2/npreal2.o
 
