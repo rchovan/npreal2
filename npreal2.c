@@ -1300,13 +1300,13 @@ static int npreal_ioctl(struct tty_struct * tty,
         npreal_send_break(info, arg ? arg*(HZ/10) : HZ/4);
         return(0);
     case TIOCGSOFTCAR:
-        error = access_ok(VERIFY_WRITE, (void *)arg, sizeof(long))?0:-EFAULT;
+        error = ACCESS_OK(VERIFY_WRITE, (void *)arg, sizeof(long))?0:-EFAULT;
         if ( error )
             return(error);
         put_to_user(C_CLOCAL(tty) ? 1 : 0, (unsigned long *)arg);
         return 0;
     case TIOCSSOFTCAR:
-        error = access_ok(VERIFY_READ, (void *)arg, sizeof(long))?0:-EFAULT;
+        error = ACCESS_OK(VERIFY_READ, (void *)arg, sizeof(long))?0:-EFAULT;
         if ( error )
             return(error);
         get_from_user(templ,(unsigned long *)arg);
@@ -1320,19 +1320,19 @@ static int npreal_ioctl(struct tty_struct * tty,
 #endif
         return(0);
     case TIOCGSERIAL:
-        error = access_ok(VERIFY_WRITE, (void *)arg,
+        error = ACCESS_OK(VERIFY_WRITE, (void *)arg,
                           sizeof(struct serial_struct))?0:-EFAULT;
         if ( error )
             return(error);
         return(npreal_get_serial_info(info, (struct serial_struct *)arg));
     case TIOCSSERIAL:
-        error = access_ok(VERIFY_READ, (void *)arg,
+        error = ACCESS_OK(VERIFY_READ, (void *)arg,
                           sizeof(struct serial_struct))?0:-EFAULT;
         if ( error )
             return(error);
         return(npreal_set_serial_info(info, (struct serial_struct *)arg));
     case TIOCSERGETLSR: /* Get line status register */
-        error = access_ok(VERIFY_WRITE, (void *)arg,
+        error = ACCESS_OK(VERIFY_WRITE, (void *)arg,
                           sizeof(unsigned int))?0:-EFAULT;
         if ( error )
             return(error);
@@ -1387,7 +1387,7 @@ static int npreal_ioctl(struct tty_struct * tty,
      *     RI where only 0->1 is counted.
      */
     case TIOCGICOUNT:
-        error = access_ok(VERIFY_WRITE, (void *)arg,
+        error = ACCESS_OK(VERIFY_WRITE, (void *)arg,
                           sizeof(struct serial_icounter_struct))?0:-EFAULT;
         if ( error )
             return(error);
@@ -3304,7 +3304,7 @@ npreal_net_ioctl (
             len = nd->do_session_recovery_len;
         else
             len = (int)nd->cmd_buffer[2] + 3;
-        rtn = access_ok( VERIFY_WRITE, (void *)arg, len)?0:-EFAULT;
+        rtn = ACCESS_OK( VERIFY_WRITE, (void *)arg, len)?0:-EFAULT;
         if ( rtn )
         {
             goto done;
@@ -3328,7 +3328,7 @@ npreal_net_ioctl (
         if (size > 84)
             size = 84;
 
-        rtn = access_ok( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
+        rtn = ACCESS_OK( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
         if ( rtn )
         {
             goto done;
@@ -3453,7 +3453,7 @@ npreal_net_ioctl (
         if (size != sizeof (status))
             goto done;
 
-        rtn = access_ok( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
+        rtn = ACCESS_OK( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
         if ( rtn )
         {
             goto done;
@@ -3478,7 +3478,7 @@ npreal_net_ioctl (
         if (size != sizeof (struct server_setting_struct))
             goto done;
 
-        rtn = access_ok( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
+        rtn = ACCESS_OK( VERIFY_READ,  (void *)arg, size )?0:-EFAULT;
         if ( rtn )
         {
             goto done;
