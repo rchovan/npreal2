@@ -24,6 +24,13 @@
 #endif
 
 
+
+#if (LINUX_VERSION_CODE >= VERSION_CODE(4,18,0))
+#define ACCESS_OK(x,y,z) access_ok(y,z)
+#else
+#define ACCESS_OK(x,y,z) access_ok(x,y,z)
+#endif
+
 #define IRQ_RET irqreturn_t
 
 
