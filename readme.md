@@ -1,6 +1,6 @@
 NOT MAINTAINED ANYMORE
 
-due to lack of time and lot of issues I've stopped using MONA TTY server. I've switched to USB-1Wire convertor.
+due to lack of time and lot of issues I've stopped using MOXA TTY server. I've switched to USB-1Wire convertor.
 If you have issues, look at the AUR repository, it is still maintained, and you can apply patches manually.
 
 ```
